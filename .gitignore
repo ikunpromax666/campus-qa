@@ -1,0 +1,16 @@
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Maven
+target/
+
+# Logs
+*.log
+logs/
+
+# MAC
+.DS_Store

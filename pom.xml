@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ① 聚合父工程继续继承 spring-boot-starter-parent，统一 Spring Boot 版本 -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.campus</groupId>
+    <artifactId>campus-qa</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <!-- ② 关键：聚合工程必须打包为 pom -->
+    <packaging>pom</packaging>
+    <name>campus-qa</name>
+
+    <modules>
+        <module>campus-qa-common</module>
+        <module>campus-qa-pojo</module>
+        <module>campus-qa-mapper</module>
+        <module>campus-qa-service</module>
+        <module>campus-qa-web</module>
+    </modules>
+
+   <properties>
+        <java.version>17</java.version>
+   </properties>
+
+</project>

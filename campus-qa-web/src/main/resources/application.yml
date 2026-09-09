@@ -1,0 +1,5 @@
+server:
+  port: 8848
+spring:
+  application:
+    name: campus-qa-web
