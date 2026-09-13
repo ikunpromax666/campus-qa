@@ -28,6 +28,10 @@
 
    <properties>
         <java.version>17</java.version>
+        <!-- 强制 javac 运行注解处理器（Lombok）：
+             JDK 23 起 javac 默认关闭隐式注解处理，若 Maven 跑在高版本 JDK 上
+             会导致 @Data/@Getter 等静默失效，此配置显式开启（-proc:full） -->
+        <maven.compiler.proc>full</maven.compiler.proc>
    </properties>
 
 </project>
