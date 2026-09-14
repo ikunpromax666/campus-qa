@@ -11,6 +11,22 @@
 	<artifactId>campus-qa-pojo</artifactId>
 
 	<dependencies>
-
+		<!-- 依赖链：pojo → common（DTO/VO 后续可能用到 ResultCode 等） -->
+		<dependency>
+			<groupId>com.campus</groupId>
+			<artifactId>campus-qa-common</artifactId>
+			<version>0.0.1-SNAPSHOT</version>
+		</dependency>
+		<!-- Lombok：@Data 等 -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+		</dependency>
+		<!-- 只要 MP 的注解包（@TableName/@TableId/@TableField/@TableLogic），
+		     不引整个 starter，保持 pojo 模块纯净、不拖 Spring 依赖 -->
+		<dependency>
+			<groupId>com.baomidou</groupId>
+			<artifactId>mybatis-plus-annotation</artifactId>
+		</dependency>
 	</dependencies>
 </project>

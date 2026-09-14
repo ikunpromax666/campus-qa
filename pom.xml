@@ -28,10 +28,28 @@
 
    <properties>
         <java.version>17</java.version>
+        <!-- MyBatis-Plus 版本统一管理（spring-boot-starter-parent 不托管它，必须自己声明） -->
+        <mybatis-plus.version>3.5.9</mybatis-plus.version>
         <!-- 强制 javac 运行注解处理器（Lombok）：
              JDK 23 起 javac 默认关闭隐式注解处理，若 Maven 跑在高版本 JDK 上
              会导致 @Data/@Getter 等静默失效，此配置显式开启（-proc:full） -->
         <maven.compiler.proc>full</maven.compiler.proc>
    </properties>
+
+    <!-- 只做"版本声明"，不引入实际依赖：子模块声明 mybatis-plus 相关坐标时无需写 version -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-annotation</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 </project>
