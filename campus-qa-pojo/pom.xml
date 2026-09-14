@@ -11,6 +11,11 @@
 	<artifactId>campus-qa-pojo</artifactId>
 
 	<dependencies>
+		<!-- Bean Validation 注解（@NotBlank/@Pattern/@Size），只引 API 不引实现 -->
+		<dependency>
+			<groupId>jakarta.validation</groupId>
+			<artifactId>jakarta.validation-api</artifactId>
+		</dependency>
 		<!-- 依赖链：pojo → common（DTO/VO 后续可能用到 ResultCode 等） -->
 		<dependency>
 			<groupId>com.campus</groupId>

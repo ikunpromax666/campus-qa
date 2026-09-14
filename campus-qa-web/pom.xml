@@ -10,6 +10,10 @@
     </parent>
     <artifactId>campus-qa-web</artifactId>
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
         <!-- 依赖 service 层，mapper/pojo/common 会随之传递下来 -->
         <dependency>
             <groupId>com.campus</groupId>

@@ -8,6 +8,9 @@ spring:
     url: jdbc:mysql://localhost:3306/campus_qa?useSSL=false&serverTimezone=UTC
     username: root
     password: syf1017539550
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
 
 # JWT 配置
 jwt:
