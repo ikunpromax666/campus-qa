@@ -18,3 +18,16 @@ jwt:
   secret: campus-qa-dev-jwt-secret-2026-abc123456789
   # token 有效期（小时），72 = 3 天
   expire-hours: 72
+
+# MyBatis-plus 配置
+  mybatis-plus:
+    configuration:
+      # 开发环境打印 SQL（生产环境关闭）
+      log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+      # 驼峰映射
+      map-underscore-to-camel-case: true
+    global-config:
+      db-config:
+        # 主键策略：自增（与实体 @TableId(AUTO) 一致，这里做全局兜底）
+        id-type: auto
+

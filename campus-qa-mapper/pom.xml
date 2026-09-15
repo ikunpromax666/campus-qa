@@ -11,6 +11,12 @@
 	<artifactId>campus-qa-mapper</artifactId>
 
 	<dependencies>
+		<!-- MyBatis-Plus Starter：提供 BaseMapper 接口 + 自动配置 -->
+		<dependency>
+			<groupId>com.baomidou</groupId>
+			<artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>com.campus</groupId>
 			<artifactId>campus-qa-pojo</artifactId>
