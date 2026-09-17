@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
                 ? firstError.getField() + ": " + firstError.getDefaultMessage()
                 : "参数校验失败";
         log.warn("参数校验异常: {}", msg);
-        return Result.fail(ResultCode.BUSINESS_ERROR.getCode(), msg);
+        return Result.fail(ResultCode.VALIDATE_ERROR.getCode(), msg);
     }
 
     /** ③ 参数绑定异常（@Valid + 表单/Query 触发） */
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
                 ? firstError.getField() + ": " + firstError.getDefaultMessage()
                 : "参数校验失败";
         log.warn("参数绑定异常: {}", msg);
-        return Result.fail(ResultCode.BUSINESS_ERROR.getCode(), msg);
+        return Result.fail(ResultCode.VALIDATE_ERROR.getCode(), msg);
     }
 
     /** ④ 兜底：所有未预期异常 → 返回 500，堆栈只打日志 */

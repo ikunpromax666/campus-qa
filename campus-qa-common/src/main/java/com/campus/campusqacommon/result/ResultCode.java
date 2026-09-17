@@ -40,6 +40,7 @@ public enum ResultCode {
     FORBIDDEN( 403 , "无权限访问" ),
     SYSTEM_ERROR( 500 , "系统错误，请稍后重试" ),
     BUSINESS_ERROR( 10000 , "业务异常" ),
+    VALIDATE_ERROR( 400 , "参数校验失败" ),
 
     //用户模块状态码
     PHONE_EXISTS( 10001 , "手机号已注册" ),
@@ -47,6 +48,7 @@ public enum ResultCode {
     PASSWORD_ERROR( 10003 , "密码错误" ),
     USER_DISABLED( 10004 , "账号已被禁用" ),
     NICKNAME_EXISTS( 10005 , "昵称已被使用" ),
+    PASSWORD_MISMATCH( 10006 , "两次输入密码不一致" ),
 
     //问题模块状态码
     QUESTION_NOT_FOUND( 20001 , "问题不存在或已删除" ),

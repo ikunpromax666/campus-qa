@@ -5,7 +5,7 @@ spring:
     name: campus-qa-web
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/campus_qa?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/campus_qa?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf-8
     username: root
     password: syf1017539550
   jackson:
@@ -19,15 +19,14 @@ jwt:
   # token 有效期（小时），72 = 3 天
   expire-hours: 72
 
-# MyBatis-plus 配置
-  mybatis-plus:
-    configuration:
-      # 开发环境打印 SQL（生产环境关闭）
-      log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-      # 驼峰映射
-      map-underscore-to-camel-case: true
-    global-config:
-      db-config:
-        # 主键策略：自增（与实体 @TableId(AUTO) 一致，这里做全局兜底）
-        id-type: auto
-
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    # 开发环境打印 SQL（生产环境关闭）
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 驼峰映射（数据库 create_time → Java createTime）
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      # 主键策略：自增（与实体 @TableId(AUTO) 一致，这里做全局兜底）
+      id-type: auto

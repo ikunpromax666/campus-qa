@@ -11,6 +11,13 @@
 	<artifactId>campus-qa-service</artifactId>
 
 	<dependencies>
+
+		<!-- 密码加密 -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>com.campus</groupId>
 			<artifactId>campus-qa-mapper</artifactId>

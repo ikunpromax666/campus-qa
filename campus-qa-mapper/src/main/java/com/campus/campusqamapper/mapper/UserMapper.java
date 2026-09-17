@@ -3,6 +3,7 @@ package com.campus.campusqamapper.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.campus.campusqapojo.entity.User;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * ClassName: UserMapper
@@ -13,4 +14,6 @@ import org.apache.ibatis.annotations.Mapper;
  */
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
+    @Select("select * from user where phone = #{phone}")
+    User selectByPhone(String phone);
 }
