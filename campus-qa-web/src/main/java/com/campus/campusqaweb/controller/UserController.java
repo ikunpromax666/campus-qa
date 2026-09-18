@@ -30,6 +30,7 @@ public class UserController {
 
     // 构造器注入（推荐方式，Spring 4.3+ 自动注入）
     public UserController(UserService userService) {
+
         this.userService = userService;
     }
     

@@ -49,6 +49,7 @@ public enum ResultCode {
     USER_DISABLED( 10004 , "账号已被禁用" ),
     NICKNAME_EXISTS( 10005 , "昵称已被使用" ),
     PASSWORD_MISMATCH( 10006 , "两次输入密码不一致" ),
+    PHONE_NOT_EXIST( 10007 , "手机号不存在" ),
 
     //问题模块状态码
     QUESTION_NOT_FOUND( 20001 , "问题不存在或已删除" ),

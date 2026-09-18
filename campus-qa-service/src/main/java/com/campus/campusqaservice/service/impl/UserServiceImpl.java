@@ -13,8 +13,6 @@ import com.campus.campusqapojo.entity.User;
 import com.campus.campusqapojo.vo.LoginVO;
 import com.campus.campusqapojo.vo.UserInfoVO;
 import com.campus.campusqaservice.service.UserService;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -30,9 +28,12 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final JwtUtils jwtUtils;
-    public UserServiceImpl (UserMapper userMapper, JwtUtils jwtUtils) {
-        this .userMapper = userMapper;
-        this .jwtUtils = jwtUtils;
+    private final BCryptPasswordEncoder encoder;
+
+    public UserServiceImpl (UserMapper userMapper, JwtUtils jwtUtils, BCryptPasswordEncoder encoder) {
+        this.userMapper = userMapper;
+        this.jwtUtils = jwtUtils;
+        this.encoder = encoder;
     }
 
     @Override
@@ -40,20 +41,21 @@ public class UserServiceImpl implements UserService {
     public LoginVO register(UserRegisterDTO dto) {
         //确认密码是否一致
         if (!dto.getPassword().equals(dto.getConfirmPassword())) {
-            throw new BusinessException(ResultCode.PASSWORD_MISMATCH.getCode(),ResultCode.PASSWORD_MISMATCH.getMessage());
+            throw new BusinessException(ResultCode.PASSWORD_MISMATCH);
         }
+
+
 
         // 校验手机号是否存在
         long count = userMapper.selectCount(
                 new QueryWrapper<User>().eq("phone", dto.getPhone())
         );
         if (count > 0) {
-            throw new BusinessException(ResultCode.PHONE_EXISTS.getCode(),ResultCode.PHONE_EXISTS.getMessage());
+            throw new BusinessException(ResultCode.PHONE_EXISTS);
         }
 
 
         // 1. BCrypt 加密
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         String encodedPassword = encoder.encode(dto.getPassword());
 
         //构建实体
@@ -64,7 +66,7 @@ public class UserServiceImpl implements UserService {
         user.setRole(0);
         userMapper.insert(user);
 
-        // 2. 生成 JWT
+        // 2. 生成JWT
         String token = jwtUtils.createToken(user.getId(), user.getRole());
 
         //返回vo
@@ -76,7 +78,30 @@ public class UserServiceImpl implements UserService {
     @Override
     /** 登录：校验手机号+密码、生成 JWT */
     public LoginVO login(UserLoginDTO dto) {
-        return null;
+        // 校验手机号是否存在
+        User user = userMapper.selectOne(
+                new QueryWrapper<User>().eq("phone", dto.getPhone())
+        );
+
+        if (user == null) {
+            throw new BusinessException(ResultCode.PHONE_NOT_REGISTERED);
+        }
+
+
+
+
+
+        // 校验密码是否正确
+        if (!encoder.matches(dto.getPassword(), user.getPassword())) {
+            throw new BusinessException(ResultCode.PASSWORD_ERROR);
+        }
+
+        // 生成JWT
+        String token = jwtUtils.createToken(user.getId(), user.getRole());
+        LoginVO vo = new LoginVO();
+        vo.setToken(token);
+        vo.setNickname(user.getNickname());
+        return vo;
     }
     /** 获取当前登录用户信息 */
     @Override
