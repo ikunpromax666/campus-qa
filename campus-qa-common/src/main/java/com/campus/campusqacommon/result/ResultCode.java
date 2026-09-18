@@ -50,6 +50,7 @@ public enum ResultCode {
     NICKNAME_EXISTS( 10005 , "昵称已被使用" ),
     PASSWORD_MISMATCH( 10006 , "两次输入密码不一致" ),
     PHONE_NOT_EXIST( 10007 , "手机号不存在" ),
+    USER_NOT_EXIST( 10008 , "用户不存在" ),
 
     //问题模块状态码
     QUESTION_NOT_FOUND( 20001 , "问题不存在或已删除" ),
@@ -64,6 +65,9 @@ public enum ResultCode {
     //互动状态码
     ALREADY_LIKED( 40001 , "您已经点赞过了" ),
     ALREADY_FAVORITED( 40002 , "您已经收藏过了" );
+
+
+
 
     private final Integer code;
     private final String message;

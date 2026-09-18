@@ -30,3 +30,8 @@ mybatis-plus:
     db-config:
       # 主键策略：自增（与实体 @TableId(AUTO) 一致，这里做全局兜底）
       id-type: auto
+
+# 日志编码：强制 Logback 控制台输出 UTF-8，解决 Windows + IDEA 中文乱码
+logging:
+  charset:
+    console: UTF-8

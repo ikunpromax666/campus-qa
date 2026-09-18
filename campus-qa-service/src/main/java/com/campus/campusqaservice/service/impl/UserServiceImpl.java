@@ -1,6 +1,7 @@
 package com.campus.campusqaservice.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.campus.campusqacommon.context.UserContext;
 import com.campus.campusqacommon.exception.BusinessException;
 import com.campus.campusqacommon.result.ResultCode;
 import com.campus.campusqacommon.utils.JwtUtils;
@@ -88,9 +89,6 @@ public class UserServiceImpl implements UserService {
         }
 
 
-
-
-
         // 校验密码是否正确
         if (!encoder.matches(dto.getPassword(), user.getPassword())) {
             throw new BusinessException(ResultCode.PASSWORD_ERROR);
@@ -106,17 +104,77 @@ public class UserServiceImpl implements UserService {
     /** 获取当前登录用户信息 */
     @Override
     public UserInfoVO getCurrentUser() {
-        return null;
+        //获取用户id
+        // 拦截器已保证登录，直接 requireUserId
+        Long userId = UserContext.requireUserId();
+
+
+
+        User user = userMapper.selectById(userId);
+
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        UserInfoVO vo = new UserInfoVO();
+        vo.setPhone(user.getPhone());
+        vo.setId(userId);
+        vo.setNickname(user.getNickname());
+        vo.setAvatar(user.getAvatar());
+        vo.setBio(user.getBio());
+        vo.setRole(user.getRole());
+        vo.setCreateTime(user.getCreateTime());
+
+        return vo;
     }
     /** 更新个人资料（昵称/头像/简介） */
     @Override
     public void updateProfile(UserUpdateDTO dto) {
+        //获取用户id
+        // 拦截器已保证登录，直接 requireUserId
+        Long userId = UserContext.requireUserId();
 
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        //更新用户信息
+        if (dto.getNickname() != null) {
+            user.setNickname(dto.getNickname());
+        }
+        if (dto.getAvatar() != null) {
+            user.setAvatar(dto.getAvatar());
+        }
+        if (dto.getBio() != null) {
+            user.setBio(dto.getBio());
+        }
+        userMapper.updateById(user);
     }
     /** 修改密码 */
     @Override
     public void updatePassword(PasswordUpdateDTO dto) {
+        //获取用户id
+        // 拦截器已保证登录，直接 requireUserId
+        Long userId = UserContext.requireUserId();
 
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+
+        //校验旧密码是否正确
+        if (!encoder.matches(dto.getOldPassword(), user.getPassword())) {
+            throw new BusinessException(ResultCode.PASSWORD_ERROR);
+        }
+        //校验新密码是否一致
+        if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
+            throw new BusinessException(ResultCode.PASSWORD_MISMATCH);
+        }
+
+        //更新密码并加密保存到数据库
+        user.setPassword(encoder.encode(dto.getNewPassword()));
+        userMapper.updateById(user);
     }
 
 }
