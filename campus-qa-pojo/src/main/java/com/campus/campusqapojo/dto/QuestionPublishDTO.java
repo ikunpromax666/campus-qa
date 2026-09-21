@@ -29,5 +29,6 @@ public class QuestionPublishDTO {
     private Long categoryId;
 
     @Size(max = 10)
+    @NotNull(message = "标签不能为空")
     private List<Long> tagIds;
 }

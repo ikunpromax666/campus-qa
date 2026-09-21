@@ -37,6 +37,7 @@ public enum ResultCode {
 
     SUCCESS(200, "操作成功"),
     UNAUTHORIZED( 401 , "未登录或Token已过期" ),
+    NOT_FOUND( 404 , "资源不存在" ),
     FORBIDDEN( 403 , "无权限访问" ),
     SYSTEM_ERROR( 500 , "系统错误，请稍后重试" ),
     BUSINESS_ERROR( 10000 , "业务异常" ),
@@ -56,6 +57,10 @@ public enum ResultCode {
     QUESTION_NOT_FOUND( 20001 , "问题不存在或已删除" ),
     QUESTION_CLOSED( 20002 , "问题已关闭，无法回答" ),
     QUESTION_NOT_YOURS( 20003 , "无权操作该问题" ),
+    CATEGORY_NOT_FOUND( 20004 , "分类不存在" ),
+    TAG_NOT_FOUND( 20005 , "标签不存在" ),
+    QUESTION_NOT_OWNER( 20006 , "您不是该问题的作者" ),
+    QUESTION_ALREADY_CLOSED( 20007 , "该问题已关闭，无法回答" ),
 
     //回答模块状态码
     ANSWER_NOT_FOUND( 30001 , "回答不存在或已删除" ),

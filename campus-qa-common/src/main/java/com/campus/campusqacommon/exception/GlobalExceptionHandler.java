@@ -3,6 +3,7 @@ package com.campus.campusqacommon.exception;
 import com.campus.campusqacommon.result.Result;
 import com.campus.campusqacommon.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -67,7 +68,16 @@ public class GlobalExceptionHandler {
         return Result.fail(ResultCode.VALIDATE_ERROR.getCode(), msg);
     }
 
-    /** ④ 兜底：所有未预期异常 → 返回 500，堆栈只打日志 */
+    /** ④ 请求体解析失败：JSON 格式错误（如全角逗号、BOM、缺引号）
+     *  本质是参数问题，返回 400 而不是 500 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public Result<Void> handleMessageNotReadable(HttpMessageNotReadableException e) {
+        // 这类异常 message 含原始 JSON 片段，用 warn 记录方便定位，但不返回给前端
+        log.warn("请求体解析失败: {}", e.getMessage());
+        return Result.fail(ResultCode.VALIDATE_ERROR.getCode(), "请求体格式错误，请检查 JSON 格式");
+    }
+
+    /** ⑤ 兜底：所有未预期异常 → 返回 500，堆栈只打日志 */
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOther(Exception e) {
         // 未知异常必须打 error 并带堆栈，方便排查
