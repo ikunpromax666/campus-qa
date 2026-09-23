@@ -72,4 +72,5 @@ public class AnswerController {
     public Result<Void> acceptBestAnswer(Long answerId, Long questionId) {
         answerService.acceptBestAnswer(answerId, questionId);
         return Result.success();
+    }
 }
