@@ -20,11 +20,11 @@ public interface QuestionService {
 
     Long publishQuestion(QuestionPublishDTO dto);
 
-    PageResultVO<QuestionListVO> list(@Valid QuestionQueryDTO dto);
+    PageResultVO<QuestionListVO> list( QuestionQueryDTO dto);
 
     QuestionDetailVO detail(Long id);
 
-    Void update(Long id, @Valid QuestionUpdateDTO dto);
+    Void update(Long id,  QuestionUpdateDTO dto);
 
     void delete(Long id);
 

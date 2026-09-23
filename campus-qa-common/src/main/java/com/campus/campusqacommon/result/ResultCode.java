@@ -66,10 +66,15 @@ public enum ResultCode {
     ANSWER_NOT_FOUND( 30001 , "回答不存在或已删除" ),
     ANSWER_NOT_YOURS( 30002 , "无权操作该回答" ),
     ANSWER_ALREADY_ACCEPTED( 30003 , "该问题已有最佳答案" ),
+    ANSWER_NOT_OWNER( 30004 , "您不是该回答的作者" ),
+    USER_NOT_ADMIN( 30005 , "您不是管理员，无法删除回答" ),
+    ANSWER_ACCEPTED( 30006 , "该回答已被采纳" ),
+
+
 
     //互动状态码
-    ALREADY_LIKED( 40001 , "您已经点赞过了" ),
-    ALREADY_FAVORITED( 40002 , "您已经收藏过了" );
+    ALREADY_LIKED( 40001 , "您已经点赞过了" );
+
 
 
 
