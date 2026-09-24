@@ -18,5 +18,5 @@ public class ToggleResultVO {
 
     private Long targetId;
 
-
+    private Integer likeCount;
 }
