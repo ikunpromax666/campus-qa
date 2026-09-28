@@ -11,6 +11,11 @@
 	<artifactId>campus-qa-service</artifactId>
 
 	<dependencies>
+		<!-- campus-qa-service/pom.xml -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 
 		<!-- 密码加密 -->
 		<dependency>

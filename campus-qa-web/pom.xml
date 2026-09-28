@@ -10,6 +10,13 @@
     </parent>
     <artifactId>campus-qa-web</artifactId>
     <dependencies>
+
+        <!-- campus-qa-web/pom.xml，加在 spring-boot-starter-web 附近 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- SpringDoc OpenAPI（Swagger 现代替代品，Boot 3/4 原生支持） -->
         <dependency>
             <groupId>org.springdoc</groupId>
