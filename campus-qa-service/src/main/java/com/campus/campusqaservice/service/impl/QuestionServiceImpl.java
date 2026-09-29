@@ -35,6 +35,12 @@ import java.util.stream.Collectors;
 @Service
 public class QuestionServiceImpl implements QuestionService {
 
+     /** 互动目标类型：1问题 */
+    private static final Integer TARGET_QUESTION = 1;
+
+    /** 点赞状态：0 无 / 1 已赞 / 2 已踩（与 like_record.action_type 语义一致） */
+    private static final Integer STATUS_NONE = 0;
+
     private final QuestionMapper questionMapper;
 
     private final CategoryMapper categoryMapper;
@@ -45,13 +51,24 @@ public class QuestionServiceImpl implements QuestionService {
 
     private final UserMapper userMapper;
 
-    public QuestionServiceImpl(QuestionMapper questionMapper, CategoryMapper categoryMapper, TagMapper tagMapper, QuestionTagMapper questionTagMapper, UserMapper userMapper) {
+    private final LikeRecordMapper likeRecordMapper;
+
+    private final FavoriteMapper favoriteMapper;
+
+    public QuestionServiceImpl(QuestionMapper questionMapper,
+                               CategoryMapper categoryMapper,
+                               TagMapper tagMapper,
+                               QuestionTagMapper questionTagMapper,
+                               UserMapper userMapper,
+                               LikeRecordMapper likeRecordMapper,
+                               FavoriteMapper favoriteMapper) {
         this.questionMapper = questionMapper;
         this.categoryMapper = categoryMapper;
         this.tagMapper = tagMapper;
         this.questionTagMapper = questionTagMapper;
         this.userMapper = userMapper;
-
+        this.likeRecordMapper = likeRecordMapper;
+        this.favoriteMapper = favoriteMapper;
     }
 
     @Override
@@ -275,16 +292,32 @@ public class QuestionServiceImpl implements QuestionService {
         vo.setTags(tagVOList);
 
         //当前用户相关字段（游客给默认值）
-        // isOwner: 当前用户是否是作者
-
         Long currentUserId = UserContext.getUserId();
         vo.setIsOwner( currentUserId !=null && currentUserId.equals(question.getUserId()));
 
-        //likeStatus: 0 未点赞，1 已点赞
-        //TODO互动模块还没写，先写 0）
-        vo.setLikeStatus(0);
-        // isFavorited: false 未收藏
-        vo.setIsFavorited(false);
+        // likeStatus: 0无 / 1已赞 / 2已踩；isFavorited: 是否已收藏
+        // 游客（未登录）直接给默认值，不查库 —— currentUserId 为 null 时拼出来的 SQL 也没意义
+        Integer likeStatus = STATUS_NONE;
+        boolean isFavorited = false;
+        if (currentUserId != null) {
+            // 唯一索引保证"一人一目标最多一条" → 用 selectOne
+            LikeRecord likeRecord = likeRecordMapper.selectOne(new QueryWrapper<LikeRecord>()
+                    .eq("user_id", currentUserId)
+                    .eq("target_id", question.getId())
+                    .eq("target_type", TARGET_QUESTION));
+            if (likeRecord != null) {
+                // action_type 取值（1赞/2踩）和 VO 的 likeStatus 语义天然对齐，直接复用
+                likeStatus = likeRecord.getActionType();
+            }
+
+            Favorite favorite = favoriteMapper.selectOne(new QueryWrapper<Favorite>()
+                    .eq("user_id", currentUserId)
+                    .eq("question_id", question.getId()));
+            isFavorited = favorite != null;
+        }
+        vo.setLikeStatus(likeStatus);
+        vo.setIsFavorited(isFavorited);
+
         vo.setId(question.getId());
         vo.setTitle(question.getTitle());
         vo.setContent(question.getContent());

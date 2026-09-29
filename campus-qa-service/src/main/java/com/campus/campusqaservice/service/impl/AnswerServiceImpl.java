@@ -15,12 +15,14 @@ import com.campus.campusqacommon.context.UserContext;
 import com.campus.campusqacommon.exception.BusinessException;
 import com.campus.campusqacommon.result.ResultCode;
 import com.campus.campusqamapper.mapper.AnswerMapper;
+import com.campus.campusqamapper.mapper.LikeRecordMapper;
 import com.campus.campusqamapper.mapper.QuestionMapper;
 import com.campus.campusqamapper.mapper.UserMapper;
 import com.campus.campusqapojo.dto.AnswerPublishDTO;
 import com.campus.campusqapojo.dto.AnswerQueryDTO;
 import com.campus.campusqapojo.dto.AnswerUpdateDTO;
 import com.campus.campusqapojo.entity.Answer;
+import com.campus.campusqapojo.entity.LikeRecord;
 import com.campus.campusqapojo.entity.Question;
 import com.campus.campusqapojo.entity.User;
 import com.campus.campusqapojo.vo.AnswerVO;
@@ -36,14 +38,26 @@ import java.util.Map;
 
 @Service
 public class AnswerServiceImpl implements AnswerService {
+
+    /** 互动目标类型：2回答 */
+    private static final Integer TARGET_ANSWER = 2;
+
+    /** 点赞状态：0 无 / 1 已赞 / 2 已踩（与 like_record.action_type 语义一致） */
+    private static final Integer STATUS_NONE = 0;
+
     private final UserMapper userMapper;
     private final QuestionMapper questionMapper;
     private final AnswerMapper answerMapper;
+    private final LikeRecordMapper likeRecordMapper;
 
-    public AnswerServiceImpl(UserMapper userMapper, QuestionMapper questionMapper, AnswerMapper answerMapper) {
+    public AnswerServiceImpl(UserMapper userMapper,
+                             QuestionMapper questionMapper,
+                             AnswerMapper answerMapper,
+                             LikeRecordMapper likeRecordMapper) {
         this.userMapper = userMapper;
         this.questionMapper = questionMapper;
         this.answerMapper = answerMapper;
+        this.likeRecordMapper = likeRecordMapper;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -124,6 +138,24 @@ public class AnswerServiceImpl implements AnswerService {
 
         //组装vo
         Long currentUserId = UserContext.getUserId();
+
+        // 批量回填当前用户的点赞状态：一次查完本页所有回答的点赞记录 → Map，避免循环里逐条查（N+1）
+        // 游客（currentUserId 为 null）不查库，全部走默认值
+        Map<Long, Integer> likeStatusMap = new HashMap<>();
+        if (currentUserId != null && !answers.isEmpty()) {
+            List<Long> answerIds = new ArrayList<>();
+            for (Answer answer : answers) {
+                answerIds.add(answer.getId());
+            }
+            List<LikeRecord> likeRecords = likeRecordMapper.selectList(new QueryWrapper<LikeRecord>()
+                    .eq("user_id", currentUserId)
+                    .eq("target_type", TARGET_ANSWER)
+                    .in("target_id", answerIds));
+            for (LikeRecord record : likeRecords) {
+                likeStatusMap.put(record.getTargetId(), record.getActionType());
+            }
+        }
+
         List<AnswerVO> voList = new ArrayList<>();
         for (Answer answer : answers) {
             AnswerVO vo = new AnswerVO();
@@ -143,8 +175,8 @@ public class AnswerServiceImpl implements AnswerService {
 
             vo.setIsOwner(currentUserId != null && currentUserId.equals(answer.getUserId()));
 
-            //TODO 互动模块完成后回填真实值
-            vo.setLikeStatus(0);
+            // 点赞状态：Map 里没有 = 没点过 → 默认 0（无 / 1已赞 / 2已踩）
+            vo.setLikeStatus(likeStatusMap.getOrDefault(answer.getId(), STATUS_NONE));
 
             voList.add(vo);
         }
