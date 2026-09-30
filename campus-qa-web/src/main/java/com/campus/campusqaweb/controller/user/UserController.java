@@ -1,4 +1,4 @@
-package com.campus.campusqaweb.controller;
+package com.campus.campusqaweb.controller.user;
 
 import com.campus.campusqacommon.annotation.RequireLogin;
 import com.campus.campusqacommon.result.Result;

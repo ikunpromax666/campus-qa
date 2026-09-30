@@ -3,8 +3,11 @@ package com.campus.campusqaservice.service;
 import com.campus.campusqapojo.dto.PasswordUpdateDTO;
 import com.campus.campusqapojo.dto.UserLoginDTO;
 import com.campus.campusqapojo.dto.UserRegisterDTO;
+import com.campus.campusqapojo.dto.UserStatusUpdateDTO;
 import com.campus.campusqapojo.dto.UserUpdateDTO;
+import com.campus.campusqapojo.vo.AdminUserVO;
 import com.campus.campusqapojo.vo.LoginVO;
+import com.campus.campusqapojo.vo.PageResultVO;
 import com.campus.campusqapojo.vo.UserInfoVO;
 
 /**
@@ -29,4 +32,13 @@ public interface UserService {
 
     /** 修改密码 */
     void updatePassword(PasswordUpdateDTO dto);
+
+    /** 管理员：用户分页列表（支持昵称/手机号模糊搜索、按状态筛选，手机号脱敏返回） */
+    PageResultVO<AdminUserVO> listUsers(Integer page, Integer size, String keyword, Integer status);
+
+    /** 管理员：启用/禁用用户（id 走路径参数，仅 status 走请求体） */
+    void updateStatus(Long id, UserStatusUpdateDTO dto);
+
+    /** 判断用户当前是否处于正常状态（供登录拦截器校验"禁用立即生效"） */
+    boolean isUserEnabled(Long userId);
 }

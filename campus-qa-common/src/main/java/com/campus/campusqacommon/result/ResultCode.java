@@ -75,7 +75,10 @@ public enum ResultCode {
     //互动状态码
     ALREADY_LIKED( 40001 , "您已经点赞过了" ),
     TARGET_NOT_EXIST( 40002 , "目标类型不存在" ),
-    INTERACTION_CONFLICT( 40003 , "操作过于频繁，请稍后重试" );
+    INTERACTION_CONFLICT( 40003 , "操作过于频繁，请稍后重试" ),
+
+    //管理员模块状态码
+    CANNOT_DISABLE_SELF(50001, "不能禁用/启用自己");
 
 
 

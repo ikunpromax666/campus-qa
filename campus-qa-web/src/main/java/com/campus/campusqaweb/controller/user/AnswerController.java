@@ -1,4 +1,4 @@
-package com.campus.campusqaweb.controller;
+package com.campus.campusqaweb.controller.user;
 
 import com.campus.campusqacommon.annotation.RequireLogin;
 import com.campus.campusqacommon.result.Result;
@@ -12,8 +12,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * ClassName: AnswerController

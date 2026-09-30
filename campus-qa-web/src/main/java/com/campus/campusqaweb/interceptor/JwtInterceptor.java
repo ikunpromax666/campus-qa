@@ -7,10 +7,10 @@ import com.campus.campusqacommon.context.UserContext;
 import com.campus.campusqacommon.exception.BusinessException;
 import com.campus.campusqacommon.result.ResultCode;
 import com.campus.campusqacommon.utils.JwtUtils;
+import com.campus.campusqaservice.service.UserService;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -25,7 +25,7 @@ import java.lang.reflect.Method;
  *         → afterCompletion 清理 UserContext（防止线程复用串号 + ThreadLocal 内存泄漏）
  *
  * 注解匹配规则：method 先查 → 没查到再查 declaring class（类上标注解 = 整个类生效）
- * 拦截顺序：@RequireAdmin 隐含 @RequireLogin —— 先验登录、再验 role == 1
+ * 拦截顺序：@RequireAdmin 隐含 @RequireLogin —— 先验 token、再验账号状态、最后验 role == 1
  */
 @Component
 public class JwtInterceptor implements HandlerInterceptor {
@@ -37,9 +37,16 @@ public class JwtInterceptor implements HandlerInterceptor {
 
     private final JwtUtils jwtUtils;
 
-    public JwtInterceptor(JwtUtils jwtUtils) {
+    /**
+     * 拦截器依赖 UserService 来校验账号状态。
+     * web 依赖 service 是正确方向（controller 也是这么依赖的），
+     * 【不要】为了省事直接注入 UserMapper：那是跨层依赖，Mapper 只属于 service 层。
+     */
+    private final UserService userService;
 
+    public JwtInterceptor(JwtUtils jwtUtils, UserService userService) {
         this.jwtUtils = jwtUtils;
+        this.userService = userService;
     }
 
     @Override
@@ -82,8 +89,18 @@ public class JwtInterceptor implements HandlerInterceptor {
         // 4. 写入 ThreadLocal，供 Service 层通过 UserContext.getUserId() 读取
         UserContext.set(loginUser);
 
-        // 5. 如果是 @RequireAdmin，再验一次管理员权限（role == 1）
-        if (hasRequireAdmin && loginUser.getRole() != 1) {
+        // 5. 校验账号状态：JWT 是无状态的，载荷里只有 userId / role，没有 status ——
+        //    管理员把账号禁用后，用户手上那个还没过期的 token 照样能通过 ①-④ 的全部校验。
+        //    所以每请求补一次状态查询，禁用才能"立即生效"（内部走 Redis 缓存，正常情况只有一次 GET）
+        if (!userService.isUserEnabled(loginUser.getUserId())) {
+            throw new BusinessException(ResultCode.USER_DISABLED);
+        }
+
+        // 6. 如果是 @RequireAdmin，再验一次管理员权限（role == 1）
+        //    必须写成 Integer.valueOf(1).equals(...) 而不是 loginUser.getRole() != 1：
+        //    != 会触发自动拆箱，而包装类型为 null 时拆箱直接 NPE
+        //    （旧版本签发的 token 里没有 role 字段，就会走到这条路径）
+        if (hasRequireAdmin && !Integer.valueOf(1).equals(loginUser.getRole())) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 

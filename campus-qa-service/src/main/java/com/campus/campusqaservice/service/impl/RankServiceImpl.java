@@ -116,7 +116,9 @@ public class RankServiceImpl implements RankService {
         }
 
         if (tuples.isEmpty()) {
-            // 没数据就别去碰 Redis
+            // 没数据就别去碰 Redis；但必须留日志 —— 否则"候选池为空"这条路径在日志里完全隐形，
+            // 榜单不更新时既没有 SQL、也没有 Redis 命令，排查只能靠猜（这个坑实际踩过）
+            log.warn("热榜候选池为空，跳过本轮重算：请检查 question 表近 7 天是否有 status=0 的数据");
             return;
         }
 
@@ -208,6 +210,8 @@ public class RankServiceImpl implements RankService {
         //   GROUP BY 会扫全表，数据量大了要靠索引或统计表优化（见日记记录）
         List<AnswererStatDTO> stats = answerMapper.selectAnswererStats(CANDIDATE_LIMIT);
         if (stats.isEmpty()) {
+            // 同理：这条 return 也要留痕，否则"榜单一直不更新"排查时毫无线索
+            log.warn("优秀回答者榜候选为空，跳过本轮重算：请检查 answer 表是否有 status=0 的数据");
             return;
         }
 
