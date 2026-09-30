@@ -61,6 +61,10 @@ public enum ResultCode {
     TAG_NOT_FOUND( 20005 , "标签不存在" ),
     QUESTION_NOT_OWNER( 20006 , "您不是该问题的作者" ),
     QUESTION_ALREADY_CLOSED( 20007 , "该问题已关闭，无法回答" ),
+    CATEGORY_IN_USE( 20008 , "该分类下存在正常状态的问题，无法删除" ),
+    TAG_IN_USE( 20009 , "该标签下存在正常状态的问题，无法删除" ),
+    CATEGORY_NAME_EXISTS( 20010 , "分类名称已存在" ),
+    TAG_NAME_EXISTS( 20011 , "标签名称已存在" ),
 
     //回答模块状态码
     ANSWER_NOT_FOUND( 30001 , "回答不存在或已删除" ),
