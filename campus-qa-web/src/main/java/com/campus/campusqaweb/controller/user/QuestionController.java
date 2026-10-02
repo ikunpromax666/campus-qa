@@ -5,6 +5,7 @@ import com.campus.campusqacommon.result.Result;
 import com.campus.campusqapojo.dto.QuestionPublishDTO;
 import com.campus.campusqapojo.dto.QuestionQueryDTO;
 import com.campus.campusqapojo.dto.QuestionUpdateDTO;
+import com.campus.campusqapojo.vo.MyQuestionVO;
 import com.campus.campusqapojo.vo.PageResultVO;
 import com.campus.campusqapojo.vo.QuestionDetailVO;
 import com.campus.campusqapojo.vo.QuestionListVO;
@@ -60,6 +61,20 @@ public class QuestionController {
     @GetMapping("/{id}")
     public Result<QuestionDetailVO> detail(@PathVariable Long id) {
         return Result.success(questionService.detail(id));
+    }
+
+    /**
+     * 我发表的提问（作者视角，含已关闭，不含已删除）
+     * 注意：/my 必须注册在 /{id} 之前语义才清晰 —— Spring 对 GET /question/my
+     * 会优先精确匹配 /my 而非 /{id}，但保留路径要先想清楚并注释，避免后人困惑
+     */
+    @Operation(summary = "我的提问")
+    @RequireLogin
+    @GetMapping("/my")
+    public Result<PageResultVO<MyQuestionVO>> my(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        return Result.success(questionService.myQuestions(page, size));
     }
 
     @Operation(summary = "更新问题")

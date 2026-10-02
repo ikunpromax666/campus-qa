@@ -2,24 +2,43 @@ package com.campus.campusqaservice.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campus.campusqacommon.context.UserContext;
 import com.campus.campusqacommon.exception.BusinessException;
 import com.campus.campusqacommon.result.ResultCode;
 import com.campus.campusqamapper.mapper.AnswerMapper;
+import com.campus.campusqamapper.mapper.CategoryMapper;
 import com.campus.campusqamapper.mapper.FavoriteMapper;
 import com.campus.campusqamapper.mapper.LikeRecordMapper;
 import com.campus.campusqamapper.mapper.QuestionMapper;
+import com.campus.campusqamapper.mapper.QuestionTagMapper;
+import com.campus.campusqamapper.mapper.TagMapper;
+import com.campus.campusqamapper.mapper.UserMapper;
 import com.campus.campusqapojo.dto.FavoriteToggleDTO;
 import com.campus.campusqapojo.dto.LikeToggleDTO;
 import com.campus.campusqapojo.entity.Answer;
+import com.campus.campusqapojo.entity.Category;
 import com.campus.campusqapojo.entity.Favorite;
 import com.campus.campusqapojo.entity.LikeRecord;
 import com.campus.campusqapojo.entity.Question;
+import com.campus.campusqapojo.entity.QuestionTag;
+import com.campus.campusqapojo.entity.Tag;
+import com.campus.campusqapojo.entity.User;
+import com.campus.campusqapojo.vo.MyAnswerVO;
+import com.campus.campusqapojo.vo.PageResultVO;
+import com.campus.campusqapojo.vo.QuestionListVO;
 import com.campus.campusqapojo.vo.ToggleResultVO;
 import com.campus.campusqaservice.service.InteractionService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * ClassName: InteractionServiceImpl
@@ -50,19 +69,34 @@ public class InteractionServiceImpl implements InteractionService {
     private static final Integer QUESTION_STATUS_DELETED = 2;
     private static final Integer ANSWER_STATUS_DELETED = 1;
 
+    /** 分页上限：防止 ?size=1000000 一页打爆数据库（面试考点：分页必须夹 size） */
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final QuestionMapper questionMapper;
     private final AnswerMapper answerMapper;
     private final LikeRecordMapper likeRecordMapper;
     private final FavoriteMapper favoriteMapper;
+    private final UserMapper userMapper;
+    private final CategoryMapper categoryMapper;
+    private final QuestionTagMapper questionTagMapper;
+    private final TagMapper tagMapper;
 
     public InteractionServiceImpl(QuestionMapper questionMapper,
                                   AnswerMapper answerMapper,
                                   LikeRecordMapper likeRecordMapper,
-                                  FavoriteMapper favoriteMapper) {
+                                  FavoriteMapper favoriteMapper,
+                                  UserMapper userMapper,
+                                  CategoryMapper categoryMapper,
+                                  QuestionTagMapper questionTagMapper,
+                                  TagMapper tagMapper) {
         this.questionMapper = questionMapper;
         this.answerMapper = answerMapper;
         this.likeRecordMapper = likeRecordMapper;
         this.favoriteMapper = favoriteMapper;
+        this.userMapper = userMapper;
+        this.categoryMapper = categoryMapper;
+        this.questionTagMapper = questionTagMapper;
+        this.tagMapper = tagMapper;
     }
 
     @Override
@@ -244,5 +278,260 @@ public class InteractionServiceImpl implements InteractionService {
         }
         Answer answer = answerMapper.selectById(targetId);
         return answer == null ? 0 : answer.getLikeCount();
+    }
+
+    // ==================== 我的收藏 / 我的点赞 ====================
+
+    @Override
+    public PageResultVO<QuestionListVO> myFavorites(Integer page, Integer size) {
+        Long userId = UserContext.requireUserId();
+        int pageNum = (page == null || page < 1) ? 1 : page;
+        int pageSize = (size == null || size < 1) ? 10 : Math.min(size, MAX_PAGE_SIZE);
+
+        // 收藏记录分页：收藏时间倒序 + id 兜底（unique-key tiebreaker，保证分页稳定）
+        IPage<Favorite> favPage = favoriteMapper.selectPage(new Page<>(pageNum, pageSize),
+                new QueryWrapper<Favorite>()
+                        .eq("user_id", userId)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"));
+
+        // 收藏表只存 question_id → 按收藏顺序批量查问题（保持收藏时间的展示顺序）
+        List<Long> questionIds = new ArrayList<>();
+        for (Favorite fav : favPage.getRecords()) {
+            if (!questionIds.contains(fav.getQuestionId())) {
+                questionIds.add(fav.getQuestionId());
+            }
+        }
+        return buildQuestionPage(favPage.getTotal(), pageNum, pageSize, questionIds);
+    }
+
+    @Override
+    public PageResultVO<QuestionListVO> myLikedQuestions(Integer page, Integer size) {
+        Long userId = UserContext.requireUserId();
+        int pageNum = (page == null || page < 1) ? 1 : page;
+        int pageSize = (size == null || size < 1) ? 10 : Math.min(size, MAX_PAGE_SIZE);
+
+        // 只查"赞"（action_type=1），踩不进列表；target_type=1 限定问题
+        IPage<LikeRecord> likePage = likeRecordMapper.selectPage(new Page<>(pageNum, pageSize),
+                new QueryWrapper<LikeRecord>()
+                        .eq("user_id", userId)
+                        .eq("target_type", TARGET_QUESTION)
+                        .eq("action_type", ACTION_LIKE)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"));
+
+        List<Long> questionIds = new ArrayList<>();
+        for (LikeRecord record : likePage.getRecords()) {
+            if (!questionIds.contains(record.getTargetId())) {
+                questionIds.add(record.getTargetId());
+            }
+        }
+        return buildQuestionPage(likePage.getTotal(), pageNum, pageSize, questionIds);
+    }
+
+    @Override
+    public PageResultVO<MyAnswerVO> myLikedAnswers(Integer page, Integer size) {
+        Long userId = UserContext.requireUserId();
+        int pageNum = (page == null || page < 1) ? 1 : page;
+        int pageSize = (size == null || size < 1) ? 10 : Math.min(size, MAX_PAGE_SIZE);
+
+        // 我赞过的回答：target_type=2 且 action_type=1
+        IPage<LikeRecord> likePage = likeRecordMapper.selectPage(new Page<>(pageNum, pageSize),
+                new QueryWrapper<LikeRecord>()
+                        .eq("user_id", userId)
+                        .eq("target_type", TARGET_ANSWER)
+                        .eq("action_type", ACTION_LIKE)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"));
+
+        // 批量查回答（跳过已删除：answer status=1 是删除）
+        List<Long> answerIds = new ArrayList<>();
+        for (LikeRecord record : likePage.getRecords()) {
+            if (!answerIds.contains(record.getTargetId())) {
+                answerIds.add(record.getTargetId());
+            }
+        }
+        List<Answer> answers = answerIds.isEmpty() ? Collections.emptyList() : answerMapper.selectByIds(answerIds);
+        Map<Long, Answer> answerMap = new HashMap<>();
+        for (Answer a : answers) {
+            if (!ANSWER_STATUS_DELETED.equals(a.getStatus())) {
+                answerMap.put(a.getId(), a);
+            }
+        }
+
+        // 批量查回答所属问题（拿标题做跳转），批量查回答者（拿昵称头像） —— 防 N+1
+        List<Long> questionIds = new ArrayList<>();
+        List<Long> userIds = new ArrayList<>();
+        for (Answer a : answerMap.values()) {
+            if (!questionIds.contains(a.getQuestionId())) {
+                questionIds.add(a.getQuestionId());
+            }
+            if (!userIds.contains(a.getUserId())) {
+                userIds.add(a.getUserId());
+            }
+        }
+        List<Question> questions = questionIds.isEmpty() ? Collections.emptyList() : questionMapper.selectByIds(questionIds);
+        Map<Long, Question> questionMap = new HashMap<>();
+        for (Question q : questions) {
+            questionMap.put(q.getId(), q);
+        }
+        List<User> users = userIds.isEmpty() ? Collections.emptyList() : userMapper.selectByIds(userIds);
+        Map<Long, User> userMap = new HashMap<>();
+        for (User u : users) {
+            userMap.put(u.getId(), u);
+        }
+
+        // 按点赞时间的顺序组装（已删除的回答跳过）
+        List<MyAnswerVO> voList = new ArrayList<>();
+        for (LikeRecord record : likePage.getRecords()) {
+            Answer a = answerMap.get(record.getTargetId());
+            if (a == null) {
+                continue;
+            }
+            voList.add(buildMyAnswerVO(a, questionMap, userMap));
+        }
+
+        PageResultVO<MyAnswerVO> result = new PageResultVO<>();
+        result.setRecords(voList);
+        result.setTotal(likePage.getTotal());
+        result.setPage(pageNum);
+        result.setSize(pageSize);
+        return result;
+    }
+
+    /**
+     * 互动记录(收藏/点赞) → 问题列表的公共组装：
+     * 先按记录里的 ID 批量查问题（跳过已删除），再批查用户/分类/标签填充展示字段。
+     * 面试考点：列表页所有关联数据一律批查（1 次列表 + 4 次批查），
+     * 绝不"每条记录再查一次关联"（N+1，列表一长数据库直接被打爆）。
+     */
+    private PageResultVO<QuestionListVO> buildQuestionPage(long total, int pageNum, int pageSize, List<Long> orderedQuestionIds) {
+        // selectByIds 不保序且空集合会拼 IN () 非法 SQL —— 判空 + Map 回填顺序
+        List<Question> questions = orderedQuestionIds.isEmpty() ? Collections.emptyList() : questionMapper.selectByIds(orderedQuestionIds);
+        Map<Long, Question> questionMap = new HashMap<>();
+        for (Question q : questions) {
+            // 已删除的问题不展示（收藏/点赞记录还留着，但列表里看不到）
+            if (!QUESTION_STATUS_DELETED.equals(q.getStatus())) {
+                questionMap.put(q.getId(), q);
+            }
+        }
+
+        // 按互动记录顺序取出有效问题
+        List<Question> orderedQuestions = new ArrayList<>();
+        for (Long id : orderedQuestionIds) {
+            Question q = questionMap.get(id);
+            if (q != null) {
+                orderedQuestions.add(q);
+            }
+        }
+
+        // ---- 以下与 QuestionServiceImpl.list 的批查组装一致 ----
+        List<Long> userIds = new ArrayList<>();
+        List<Long> categoryIds = new ArrayList<>();
+        for (Question q : orderedQuestions) {
+            if (!userIds.contains(q.getUserId())) {
+                userIds.add(q.getUserId());
+            }
+            if (!categoryIds.contains(q.getCategoryId())) {
+                categoryIds.add(q.getCategoryId());
+            }
+        }
+
+        List<User> users = userIds.isEmpty() ? Collections.emptyList() : userMapper.selectByIds(userIds);
+        Map<Long, User> userMap = new HashMap<>();
+        for (User user : users) {
+            userMap.put(user.getId(), user);
+        }
+
+        List<Category> categories = categoryIds.isEmpty() ? Collections.emptyList() : categoryMapper.selectByIds(categoryIds);
+        Map<Long, Category> categoryMap = new HashMap<>();
+        for (Category category : categories) {
+            categoryMap.put(category.getId(), category);
+        }
+
+        List<Long> questionIds = new ArrayList<>();
+        for (Question q : orderedQuestions) {
+            questionIds.add(q.getId());
+        }
+        List<QuestionTag> questionTags = questionIds.isEmpty()
+                ? Collections.emptyList()
+                : questionTagMapper.selectList(new QueryWrapper<QuestionTag>().in("question_id", questionIds));
+
+        List<Long> tagIds = new ArrayList<>();
+        for (QuestionTag qt : questionTags) {
+            if (!tagIds.contains(qt.getTagId())) {
+                tagIds.add(qt.getTagId());
+            }
+        }
+        List<Tag> tagList = tagIds.isEmpty() ? Collections.emptyList() : tagMapper.selectByIds(tagIds);
+        Map<Long, Tag> tagMap = new HashMap<>();
+        for (Tag tag : tagList) {
+            tagMap.put(tag.getId(), tag);
+        }
+
+        Map<Long, List<String>> tagNameMap = new HashMap<>();
+        for (QuestionTag qt : questionTags) {
+            Tag tag = tagMap.get(qt.getTagId());
+            if (tag != null) {
+                List<String> nameList = tagNameMap.get(qt.getQuestionId());
+                if (nameList == null) {
+                    nameList = new ArrayList<>();
+                    tagNameMap.put(qt.getQuestionId(), nameList);
+                }
+                nameList.add(tag.getName());
+            }
+        }
+
+        List<QuestionListVO> voList = new ArrayList<>();
+        for (Question q : orderedQuestions) {
+            QuestionListVO vo = new QuestionListVO();
+            vo.setId(q.getId());
+            vo.setTitle(q.getTitle());
+            User user = userMap.get(q.getUserId());
+            if (user != null) {
+                vo.setNickname(user.getNickname());
+                vo.setAvatar(user.getAvatar());
+            }
+            Category category = categoryMap.get(q.getCategoryId());
+            if (category != null) {
+                vo.setCategoryName(category.getName());
+            }
+            List<String> tagNames = tagNameMap.get(q.getId());
+            vo.setTags(tagNames != null ? tagNames : new ArrayList<>());
+            vo.setViewCount(q.getViewCount());
+            vo.setLikeCount(q.getLikeCount());
+            vo.setAnswerCount(q.getAnswerCount());
+            vo.setCreateTime(q.getCreateTime());
+            voList.add(vo);
+        }
+
+        PageResultVO<QuestionListVO> result = new PageResultVO<>();
+        result.setRecords(voList);
+        result.setTotal(total);
+        result.setPage(pageNum);
+        result.setSize(pageSize);
+        return result;
+    }
+
+    /** 回答 → MyAnswerVO 组装（问题标题/回答者信息从批量查询的 Map 里取） */
+    private MyAnswerVO buildMyAnswerVO(Answer a, Map<Long, Question> questionMap, Map<Long, User> userMap) {
+        MyAnswerVO vo = new MyAnswerVO();
+        vo.setId(a.getId());
+        vo.setQuestionId(a.getQuestionId());
+        Question question = questionMap.get(a.getQuestionId());
+        if (question != null) {
+            vo.setQuestionTitle(question.getTitle());
+        }
+        vo.setContent(a.getContent());
+        vo.setLikeCount(a.getLikeCount());
+        vo.setIsAccepted(a.getIsAccepted());
+        vo.setUserId(a.getUserId());
+        User user = userMap.get(a.getUserId());
+        if (user != null) {
+            vo.setNickname(user.getNickname());
+            vo.setAvatar(user.getAvatar());
+        }
+        vo.setCreateTime(a.getCreateTime());
+        return vo;
     }
 }

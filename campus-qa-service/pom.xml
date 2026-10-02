@@ -17,6 +17,34 @@
 			<artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
 
+		<!-- 只引轻量的 spring-web（提供 MultipartFile 等类型，头像上传参数要从 Controller 传进 Service）。
+		     不要引 spring-boot-starter-web：那会把整个 MVC 装配带进 service 模块，启动类扫描时产生冲突 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-web</artifactId>
+		</dependency>
+
+		<!-- 阿里云 OSS SDK：头像等文件上传
+		     面试考点：为什么用云存储不用本地磁盘？
+		     本地磁盘存文件，多实例部署时文件不共享、扩容要手动迁移；
+		     OSS 天然中心化 + CDN 加速 + 生命周期管理，公共读 Bucket 的 URL 可直接访问 -->
+		<dependency>
+			<groupId>com.aliyun.oss</groupId>
+			<artifactId>aliyun-sdk-oss</artifactId>
+			<version>3.17.4</version>
+		</dependency>
+		<!-- Java 9+ 移除了 JAXB，OSS SDK 解析响应需要，官方文档要求手动补这两个依赖 -->
+		<dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<version>2.3.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.glassfish.jaxb</groupId>
+			<artifactId>jaxb-runtime</artifactId>
+			<version>2.3.3</version>
+		</dependency>
+
 		<!-- 密码加密 -->
 		<dependency>
 			<groupId>org.springframework.security</groupId>

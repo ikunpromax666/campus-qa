@@ -6,6 +6,7 @@ import com.campus.campusqapojo.dto.AnswerPublishDTO;
 import com.campus.campusqapojo.dto.AnswerQueryDTO;
 import com.campus.campusqapojo.dto.AnswerUpdateDTO;
 import com.campus.campusqapojo.vo.AnswerVO;
+import com.campus.campusqapojo.vo.MyAnswerVO;
 import com.campus.campusqapojo.vo.PageResultVO;
 import com.campus.campusqaservice.service.AnswerService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -70,5 +71,14 @@ public class AnswerController {
     public Result<Void> acceptBestAnswer(Long answerId, Long questionId) {
         answerService.acceptBestAnswer(answerId, questionId);
         return Result.success();
+    }
+
+    @RequireLogin
+    @GetMapping("/my")
+    @Operation(summary = "我发表的回答（创建时间倒序，只含未删除）")
+    public Result<PageResultVO<MyAnswerVO>> myAnswers(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size) {
+        return Result.success(answerService.myAnswers(page, size));
     }
 }

@@ -4,6 +4,7 @@ import com.campus.campusqapojo.dto.AnswerPublishDTO;
 import com.campus.campusqapojo.dto.AnswerQueryDTO;
 import com.campus.campusqapojo.dto.AnswerUpdateDTO;
 import com.campus.campusqapojo.vo.AnswerVO;
+import com.campus.campusqapojo.vo.MyAnswerVO;
 import com.campus.campusqapojo.vo.PageResultVO;
 import jakarta.validation.Valid;
 
@@ -27,4 +28,7 @@ public interface AnswerService {
     void deleteAnswer(Long id);
 
     void acceptBestAnswer(Long answerId, Long questionId);
+
+    /** 我发表的回答（创建时间倒序，只含未删除） */
+    PageResultVO<MyAnswerVO> myAnswers(Integer page, Integer size);
 }

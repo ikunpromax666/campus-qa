@@ -59,38 +59,46 @@ public class JwtInterceptor implements HandlerInterceptor {
         Method method = hm.getMethod();
         Class<?> declaringClass = hm.getBeanType();
 
-        // 1. 目标方法/类上既没有 @RequireLogin 也没有 @RequireAdmin → 无需鉴权，直接放行
+        // 1. 先判断目标是否需要鉴权
         boolean hasRequireLogin = method.isAnnotationPresent(RequireLogin.class)
                 || declaringClass.isAnnotationPresent(RequireLogin.class);
         boolean hasRequireAdmin = method.isAnnotationPresent(RequireAdmin.class)
                 || declaringClass.isAnnotationPresent(RequireAdmin.class);
+
+        // 2. 【可选认证】尽力解析 token 写入 UserContext —— 即使接口不需要登录。
+        //    场景：问题详情页游客可看，但登录用户要看 isOwner / likeStatus / isFavorited，
+        //    这些字段依赖 UserContext；如果"无注解直接放行"，登录用户访问公开接口
+        //    Service 层拿到的 currentUserId 永远是 null（踩过的 bug）。
+        String header = request.getHeader(AUTH_HEADER);
+        boolean tokenPresent = header != null
+                && header.startsWith(TOKEN_PREFIX)
+                && header.length() > TOKEN_PREFIX.length();
+        if (tokenPresent) {
+            try {
+                UserContext.set(jwtUtils.parseToken(header.substring(TOKEN_PREFIX.length())));
+            } catch (JwtException e) {
+                // token 无效（过期/篡改/格式错误）：
+                // 受保护接口 → 必须 401，不能把坏 token 当游客放过去
+                if (hasRequireLogin || hasRequireAdmin) {
+                    throw new BusinessException(ResultCode.UNAUTHORIZED);
+                }
+                // 公开接口 → 静默降级为游客，不影响浏览体验
+            }
+        }
+
+        // 3. 公开接口：无需登录，放行（UserContext 可能已填充，供 isOwner 等字段使用）
         if (!hasRequireLogin && !hasRequireAdmin) {
             return true;
         }
 
-        // 2. 从 Authorization 请求头取 token，格式 "Bearer xxx"
-        String header = request.getHeader(AUTH_HEADER);
-        if (header == null || !header.startsWith(TOKEN_PREFIX)) {
+        // 4. 受保护接口：必须有有效登录态（token 缺失/格式错误/上一步解析失败都到不了这里）
+        LoginUser loginUser = UserContext.get();
+        if (loginUser == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        String token = header.substring(TOKEN_PREFIX.length());
-        if (token.isEmpty()) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED);
-        }
-
-        // 3. 解析 token（过期/篡改/格式错误都会抛 JwtException）
-        LoginUser loginUser;
-        try {
-            loginUser = jwtUtils.parseToken(token);
-        } catch (JwtException e) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED);
-        }
-
-        // 4. 写入 ThreadLocal，供 Service 层通过 UserContext.getUserId() 读取
-        UserContext.set(loginUser);
 
         // 5. 校验账号状态：JWT 是无状态的，载荷里只有 userId / role，没有 status ——
-        //    管理员把账号禁用后，用户手上那个还没过期的 token 照样能通过 ①-④ 的全部校验。
+        //    管理员把账号禁用后，用户手上那个还没过期的 token 照样能通过解析。
         //    所以每请求补一次状态查询，禁用才能"立即生效"（内部走 Redis 缓存，正常情况只有一次 GET）
         if (!userService.isUserEnabled(loginUser.getUserId())) {
             throw new BusinessException(ResultCode.USER_DISABLED);

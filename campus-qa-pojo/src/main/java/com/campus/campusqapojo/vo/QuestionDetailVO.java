@@ -36,6 +36,9 @@ public class QuestionDetailVO {
 
     private Integer answerCount;
 
+    /** 状态：0 正常 / 1 已关闭 / 2 已删除（前端据此显示"已关闭"横幅并隐藏回答框） */
+    private Integer status;
+
     private Integer isTop;
 
     private LocalDateTime createTime;

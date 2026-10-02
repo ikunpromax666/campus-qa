@@ -18,6 +18,7 @@ import com.campus.campusqapojo.vo.AdminUserVO;
 import com.campus.campusqapojo.vo.LoginVO;
 import com.campus.campusqapojo.vo.PageResultVO;
 import com.campus.campusqapojo.vo.UserInfoVO;
+import com.campus.campusqaservice.service.OssService;
 import com.campus.campusqaservice.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +55,12 @@ public class UserServiceImpl implements UserService {
      */
     private static final int MAX_PAGE_SIZE = 100;
 
+    /** 头像大小上限 2MB：前端 before-upload 拦一次给即时提示，后端再拦一次防绕过前端直接 curl */
+    private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+
+    /** 头像扩展名白名单：只允许图片格式，防止上传脚本/可执行文件（前端 accept 只是软约束） */
+    private static final List<String> ALLOWED_AVATAR_EXT = List.of("jpg", "jpeg", "png", "webp");
+
     /** 用户状态缓存 key：user:status:{userId} */
     private static final String USER_STATUS_KEY_PREFIX = "user:status:";
     /** 缓存里"正常"状态的取值。直接存 "0"/"1"，redis-cli 里一眼能读懂 */
@@ -65,13 +75,15 @@ public class UserServiceImpl implements UserService {
     private final JwtUtils jwtUtils;
     private final BCryptPasswordEncoder encoder;
     private final StringRedisTemplate stringRedisTemplate;
+    private final OssService ossService;
 
     public UserServiceImpl (UserMapper userMapper, JwtUtils jwtUtils, BCryptPasswordEncoder encoder,
-                            StringRedisTemplate stringRedisTemplate) {
+                            StringRedisTemplate stringRedisTemplate, OssService ossService) {
         this.userMapper = userMapper;
         this.jwtUtils = jwtUtils;
         this.encoder = encoder;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.ossService = ossService;
     }
 
     @Override
@@ -217,6 +229,64 @@ public class UserServiceImpl implements UserService {
         //更新密码并加密保存到数据库
         user.setPassword(encoder.encode(dto.getNewPassword()));
         userMapper.updateById(user);
+    }
+
+    /**
+     * 上传头像：校验文件 → 上传 OSS → 返回访问 URL
+     *
+     * 面试高频问题：
+     * Q: 为什么这个方法不加 @Transactional？
+     * A: OSS putObject 是慢速网络 I/O（几十到几百毫秒），包进事务会长时间占着数据库连接不放，
+     *    高并发下连接池被拖垮。正确姿势是"外部 I/O 放事务外，事务只包真正的 DB 写"——
+     *    所以拆成 uploadAvatar（无事务，拿 URL）+ updateAvatar（短事务，落库）两段，由 Controller 编排。
+     *    和"缓存删除要挂在事务提交后"（updateStatus）是同一类事务边界设计思想。
+     */
+    @Override
+    public String uploadAvatar(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请选择要上传的头像文件");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+
+        // 1. 扩展名白名单校验：取不到扩展名直接拒绝（防御式，不能只信前端的 accept 限制）
+        String ext = "";
+        if (originalFilename != null && originalFilename.lastIndexOf('.') >= 0) {
+            ext = originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
+        }
+        if (!ALLOWED_AVATAR_EXT.contains(ext)) {
+            throw new BusinessException("仅支持 jpg/png/webp 格式的图片");
+        }
+
+        // 2. 大小校验：yml 的 multipart.max-file-size 是硬兜底（超限直接被容器拒绝），
+        //    这里先校验能给出友好的业务提示，而不是 500
+        if (file.getSize() > MAX_AVATAR_SIZE) {
+            throw new BusinessException("头像大小不能超过 2MB");
+        }
+
+        // 3. 上传 OSS：avatar/{userId}/ 目录按用户隔离，返回的 URL 即头像地址
+        Long userId = UserContext.requireUserId();
+        try (InputStream in = file.getInputStream()) {
+            return ossService.upload("avatar/" + userId, originalFilename, in);
+        } catch (IOException e) {
+            log.error("头像文件读取失败, userId={}", userId, e);
+            throw new BusinessException("文件读取失败，请重试");
+        }
+    }
+
+    /** 头像 URL 落库：只更新 avatar 一列（局部更新，避免 read-modify-write 覆盖并发修改，同 updateStatus 思路） */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateAvatar(String avatarUrl) {
+        Long userId = UserContext.requireUserId();
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+        User update = new User();
+        update.setId(userId);
+        update.setAvatar(avatarUrl);
+        userMapper.updateById(update);
     }
 
     @Override

@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,8 +81,11 @@ public class QuestionServiceImpl implements QuestionService {
         if (category == null) {
             throw new BusinessException(ResultCode.CATEGORY_NOT_FOUND);
         }
-        //校验 tags是否存在
-        List<Tag> tags = tagMapper.selectByIds(dto.getTagIds());
+        //校验 tags是否存在（tagIds 可选；MP 的 selectByIds 空集合会拼出 IN () 非法 SQL，必须判空）
+        List<Tag> tags = Collections.emptyList();
+        if (dto.getTagIds() != null && !dto.getTagIds().isEmpty()) {
+            tags = tagMapper.selectByIds(dto.getTagIds());
+        }
         for (Tag tag : tags) {
             if (tag == null) {
                 throw new BusinessException(ResultCode.TAG_NOT_FOUND);
@@ -143,24 +147,26 @@ public class QuestionServiceImpl implements QuestionService {
         List<Long> categoryIds = questions.stream().map(Question::getCategoryId).distinct().toList();
         List<Long> questionIds = questions.stream().map(Question::getId).distinct().toList();
 
-        // 批量查用户 → Map<userId, User>
-        List <User> users = userMapper.selectByIds(userIds);
+        // 批量查用户 → Map<userId, User>（空集合判空：selectByIds 空集合会拼 IN () 报错）
+        List <User> users = userIds.isEmpty() ? Collections.emptyList() : userMapper.selectByIds(userIds);
         Map<Long,User> userMap = new HashMap<>();
         for (User user : users) {
             userMap.put(user.getId(), user);
         }
 
-        // 批量查分类 → Map<categoryId, Category>
-        List<Category> categories = categoryMapper.selectByIds(categoryIds);
+        // 批量查分类 → Map<categoryId, Category>（同上判空）
+        List<Category> categories = categoryIds.isEmpty() ? Collections.emptyList() : categoryMapper.selectByIds(categoryIds);
         Map<Long,Category> categoryMap = new HashMap<>();
         for (Category category : categories) {
             categoryMap.put(category.getId(), category);
         }
 
-        // 批量查问题-标签关联
-        List <QuestionTag> questionTags = questionTagMapper.selectList(
-                new QueryWrapper <QuestionTag>().in( "question_id" , questionIds)
-        );
+        // 批量查问题-标签关联（in 空集合同样会拼 IN () 报错，判空）
+        List <QuestionTag> questionTags = questionIds.isEmpty()
+                ? Collections.emptyList()
+                : questionTagMapper.selectList(
+                        new QueryWrapper <QuestionTag>().in( "question_id" , questionIds)
+                );
 
         //  收集所有 tagId（去重）
         List <Long> tagIds = new ArrayList<>();
@@ -170,8 +176,8 @@ public class QuestionServiceImpl implements QuestionService {
             }
         }
 
-        // 批量查标签 → Map<tagId, Tag>
-        List <Tag> tagList = tagMapper.selectByIds(tagIds);
+        // 批量查标签 → Map<tagId, Tag>（同上判空）
+        List <Tag> tagList = tagIds.isEmpty() ? Collections.emptyList() : tagMapper.selectByIds(tagIds);
         Map <Long, Tag> tagMap = new HashMap<>();
         for (Tag tag : tagList) {
             tagMap.put(tag.getId(), tag);
@@ -235,11 +241,117 @@ public class QuestionServiceImpl implements QuestionService {
         return result;
     }
 
+    /** 分页硬上限：防止 ?size=1000000 一条请求打穿服务（列表接口通用红线） */
+    private static final int MAX_PAGE_SIZE = 100;
+
+    /** 问题状态：0 正常 / 1 已关闭 / 2 已删除 */
+    private static final Integer QUESTION_STATUS_DELETED = 2;
+
+    @Override
+    public PageResultVO<MyQuestionVO> myQuestions(Integer page, Integer size) {
+        Long userId = UserContext.requireUserId();
+        int pageNum = (page == null || page < 1) ? 1 : page;
+        int pageSize = (size == null || size < 1) ? 10 : Math.min(size, MAX_PAGE_SIZE);
+
+        // 作者视角：查自己的提问，含已关闭（status=1），不含已删除（status=2）
+        // 面试考点：逻辑删除的可见性按视角区分 —— 他人/广场视角看不到已删除，
+        // 作者自己的"我的提问"列表里已关闭的仍可见（带状态标记），已删除的同样不展示
+        IPage<Question> questionPage = questionMapper.selectPage(
+                new Page<>(pageNum, pageSize),
+                new QueryWrapper<Question>()
+                        .eq("user_id", userId)
+                        .ne("status", QUESTION_STATUS_DELETED)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"));
+
+        List<Question> questions = questionPage.getRecords();
+
+        // 批查分类（空集合判空：selectByIds 拼 IN () 非法 SQL）
+        List<Long> categoryIds = new ArrayList<>();
+        for (Question q : questions) {
+            if (q.getCategoryId() != null && !categoryIds.contains(q.getCategoryId())) {
+                categoryIds.add(q.getCategoryId());
+            }
+        }
+        List<Category> categories = categoryIds.isEmpty()
+                ? Collections.emptyList() : categoryMapper.selectByIds(categoryIds);
+        Map<Long, Category> categoryMap = new HashMap<>();
+        for (Category c : categories) {
+            categoryMap.put(c.getId(), c);
+        }
+
+        // 批查问题-标签关联
+        List<Long> questionIds = new ArrayList<>();
+        for (Question q : questions) {
+            questionIds.add(q.getId());
+        }
+        List<QuestionTag> questionTags = questionIds.isEmpty()
+                ? Collections.emptyList()
+                : questionTagMapper.selectList(
+                        new QueryWrapper<QuestionTag>().in("question_id", questionIds));
+
+        // 批查标签
+        List<Long> tagIds = new ArrayList<>();
+        for (QuestionTag qt : questionTags) {
+            if (!tagIds.contains(qt.getTagId())) {
+                tagIds.add(qt.getTagId());
+            }
+        }
+        List<Tag> tagList = tagIds.isEmpty()
+                ? Collections.emptyList() : tagMapper.selectByIds(tagIds);
+        Map<Long, Tag> tagMap = new HashMap<>();
+        for (Tag t : tagList) {
+            tagMap.put(t.getId(), t);
+        }
+
+        // 按 questionId 分组标签名
+        Map<Long, List<String>> tagNameMap = new HashMap<>();
+        for (QuestionTag qt : questionTags) {
+            Tag tag = tagMap.get(qt.getTagId());
+            if (tag != null) {
+                List<String> names = tagNameMap.get(qt.getQuestionId());
+                if (names == null) {
+                    names = new ArrayList<>();
+                    tagNameMap.put(qt.getQuestionId(), names);
+                }
+                names.add(tag.getName());
+            }
+        }
+
+        // 组装 VO（作者视角：不查用户表，昵称头像都是自己的）
+        List<MyQuestionVO> voList = new ArrayList<>();
+        for (Question q : questions) {
+            MyQuestionVO vo = new MyQuestionVO();
+            vo.setId(q.getId());
+            vo.setTitle(q.getTitle());
+            vo.setStatus(q.getStatus());
+            Category category = categoryMap.get(q.getCategoryId());
+            if (category != null) {
+                vo.setCategoryName(category.getName());
+            }
+            List<String> tagNames = tagNameMap.get(q.getId());
+            vo.setTags(tagNames != null ? tagNames : new ArrayList<>());
+            vo.setViewCount(q.getViewCount());
+            vo.setLikeCount(q.getLikeCount());
+            vo.setAnswerCount(q.getAnswerCount());
+            vo.setCreateTime(q.getCreateTime());
+            voList.add(vo);
+        }
+
+        PageResultVO<MyQuestionVO> result = new PageResultVO<>();
+        result.setRecords(voList);
+        result.setTotal(questionPage.getTotal());
+        result.setPage(pageNum);
+        result.setSize(pageSize);
+        return result;
+    }
+
     @Override
     public QuestionDetailVO detail(Long id) {
         //根据id查询问题详情
         Question question = questionMapper.selectById(id);
-        if(question == null || question.getStatus() != 0){
+        // 已关闭(status=1)的问题仍可查看详情（只是禁答），仅已删除(status=2)不可见
+        if(question == null || question.getStatus() == 2){
             throw new BusinessException(ResultCode.QUESTION_NOT_FOUND);
         }
 
@@ -278,8 +390,8 @@ public class QuestionServiceImpl implements QuestionService {
              tagIds.add(qt.getTagId());
         }
 
-        // 第三步：批量查 tag 表，拿到标签详情
-        List <Tag> tagList = tagMapper.selectByIds(tagIds);
+        // 第三步：批量查 tag 表，拿到标签详情（判空防 IN () 非法 SQL）
+        List <Tag> tagList = tagIds.isEmpty() ? Collections.emptyList() : tagMapper.selectByIds(tagIds);
 
          // 组装标签列表
         List<TagVO> tagVOList = new ArrayList<>();
@@ -324,6 +436,7 @@ public class QuestionServiceImpl implements QuestionService {
         vo.setViewCount(question.getViewCount() + 1);
         vo.setLikeCount(question.getLikeCount());
         vo.setAnswerCount(question.getAnswerCount());
+        vo.setStatus(question.getStatus());
         vo.setCreateTime(question.getCreateTime());
         vo.setIsTop(question.getIsTop());
         vo.setUserId(question.getUserId());
@@ -383,9 +496,9 @@ public class QuestionServiceImpl implements QuestionService {
 
         Long currentUserId = UserContext.requireUserId();
 
-        // 1. 查问题 + 判 null/状态
+        // 1. 查问题 + 判 null/状态（删除：正常/已关闭都可删，仅已删除不可重复删）
         Question question = questionMapper.selectById(id);
-        if (question == null || question.getStatus() != 0) {
+        if (question == null || question.getStatus() == 2) {
             throw new BusinessException(ResultCode.QUESTION_NOT_FOUND);
         }
 
@@ -402,7 +515,7 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     public void close(Long id) {
-        //验证当前用户是非为作者
+        //验证当前用户是非为作者或管理员（与 delete 的权限模型对齐）
         Question question = questionMapper.selectById(id);
 
         if (question == null || question.getStatus() == 2) {
@@ -417,7 +530,7 @@ public class QuestionServiceImpl implements QuestionService {
         if (question.getStatus() == 1 ) {
             throw new BusinessException (ResultCode.QUESTION_ALREADY_CLOSED);
         }
-        if (!currentUserId.equals(userId)) {
+        if (!currentUserId.equals(userId) && !Integer.valueOf(1).equals(UserContext.get().getRole())) {
             throw new BusinessException(ResultCode.QUESTION_NOT_OWNER);
         }
         // 4. 只更新 status，避免覆盖其他字段

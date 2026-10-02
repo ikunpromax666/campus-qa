@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 全局异常处理器：把 Controller 层抛出的异常统一转成 Result 返回
@@ -77,7 +78,15 @@ public class GlobalExceptionHandler {
         return Result.fail(ResultCode.VALIDATE_ERROR.getCode(), "请求体格式错误，请检查 JSON 格式");
     }
 
-    /** ⑤ 兜底：所有未预期异常 → 返回 500，堆栈只打日志 */
+    /** ⑤ 上传文件超限：超过 spring.servlet.multipart.max-file-size，请求到不了 Controller 就抛出；
+     *  不单独捕获会落进兜底 Exception 变成 500"系统异常"，用户不知道是文件太大的问题 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        log.warn("上传文件超过大小限制: {}", e.getMessage());
+        return Result.fail(ResultCode.VALIDATE_ERROR.getCode(), "文件大小超出限制（头像最大 2MB）");
+    }
+
+    /** ⑥ 兜底：所有未预期异常 → 返回 500，堆栈只打日志 */
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOther(Exception e) {
         // 未知异常必须打 error 并带堆栈，方便排查

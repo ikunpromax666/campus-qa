@@ -26,12 +26,14 @@ import com.campus.campusqapojo.entity.LikeRecord;
 import com.campus.campusqapojo.entity.Question;
 import com.campus.campusqapojo.entity.User;
 import com.campus.campusqapojo.vo.AnswerVO;
+import com.campus.campusqapojo.vo.MyAnswerVO;
 import com.campus.campusqapojo.vo.PageResultVO;
 import com.campus.campusqaservice.service.AnswerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +46,9 @@ public class AnswerServiceImpl implements AnswerService {
 
     /** 点赞状态：0 无 / 1 已赞 / 2 已踩（与 like_record.action_type 语义一致） */
     private static final Integer STATUS_NONE = 0;
+
+    /** 分页上限：防止 ?size=1000000 一页打爆数据库（面试考点：分页必须夹 size） */
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final UserMapper userMapper;
     private final QuestionMapper questionMapper;
@@ -293,5 +298,66 @@ public class AnswerServiceImpl implements AnswerService {
 
     }
 
+    @Override
+    public PageResultVO<MyAnswerVO> myAnswers(Integer page, Integer size) {
+        Long userId = UserContext.requireUserId();
+        // 分页夹取：size 上限 MAX_PAGE_SIZE，防止一页打爆数据库
+        int pageNum = (page == null || page < 1) ? 1 : page;
+        int pageSize = (size == null || size < 1) ? 10 : Math.min(size, MAX_PAGE_SIZE);
+
+        // 只查自己的、未删除的回答；创建时间倒序 + id 兜底保证分页稳定
+        IPage<Answer> answerPage = answerMapper.selectPage(new Page<>(pageNum, pageSize),
+                new QueryWrapper<Answer>()
+                        .eq("user_id", userId)
+                        .eq("status", 0)
+                        .orderByDesc("create_time")
+                        .orderByDesc("id"));
+
+        List<Answer> answers = answerPage.getRecords();
+
+        // 批量查所属问题拿标题（防 N+1：绝不每条回答查一次问题）
+        List<Long> questionIds = new ArrayList<>();
+        for (Answer a : answers) {
+            if (!questionIds.contains(a.getQuestionId())) {
+                questionIds.add(a.getQuestionId());
+            }
+        }
+        List<Question> questions = questionIds.isEmpty() ? Collections.emptyList() : questionMapper.selectByIds(questionIds);
+        Map<Long, Question> questionMap = new HashMap<>();
+        for (Question q : questions) {
+            questionMap.put(q.getId(), q);
+        }
+
+        // "我的回答"里所有回答都是自己的 → 用户信息一次查询即可
+        User me = userMapper.selectById(userId);
+
+        List<MyAnswerVO> voList = new ArrayList<>();
+        for (Answer a : answers) {
+            MyAnswerVO vo = new MyAnswerVO();
+            vo.setId(a.getId());
+            vo.setQuestionId(a.getQuestionId());
+            Question question = questionMap.get(a.getQuestionId());
+            if (question != null) {
+                vo.setQuestionTitle(question.getTitle());
+            }
+            vo.setContent(a.getContent());
+            vo.setLikeCount(a.getLikeCount());
+            vo.setIsAccepted(a.getIsAccepted());
+            vo.setUserId(userId);
+            if (me != null) {
+                vo.setNickname(me.getNickname());
+                vo.setAvatar(me.getAvatar());
+            }
+            vo.setCreateTime(a.getCreateTime());
+            voList.add(vo);
+        }
+
+        PageResultVO<MyAnswerVO> result = new PageResultVO<>();
+        result.setRecords(voList);
+        result.setTotal(answerPage.getTotal());
+        result.setPage(pageNum);
+        result.setSize(pageSize);
+        return result;
+    }
 
 }

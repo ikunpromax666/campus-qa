@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * ClassName: UserController
@@ -70,5 +71,15 @@ public class UserController {
     public Result<Void> updatePassword(@RequestBody @Valid PasswordUpdateDTO dto) {
         userService.updatePassword(dto);
         return Result.success();
+    }
+
+    @Operation(summary = "上传头像", description = "本地图片上传，转存阿里云 OSS 后返回访问 URL，并同步更新数据库")
+    @PostMapping("/avatar")
+    @RequireLogin
+    public Result<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        // 两段式编排：① 校验 + 上传 OSS（外部网络 I/O，不进事务）② 拿到 URL 后再短事务落库
+        String url = userService.uploadAvatar(file);
+        userService.updateAvatar(url);
+        return Result.success(url);
     }
 }

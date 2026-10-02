@@ -9,6 +9,7 @@ import com.campus.campusqapojo.vo.AdminUserVO;
 import com.campus.campusqapojo.vo.LoginVO;
 import com.campus.campusqapojo.vo.PageResultVO;
 import com.campus.campusqapojo.vo.UserInfoVO;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * ClassName: UserService
@@ -29,6 +30,12 @@ public interface UserService {
 
     /** 更新个人资料（昵称/头像/简介） */
     void updateProfile(UserUpdateDTO dto);
+
+    /** 上传头像：校验文件类型/大小 → 上传 OSS，返回访问 URL（外部网络 I/O，刻意不放事务内） */
+    String uploadAvatar(MultipartFile file);
+
+    /** 头像 URL 落库（单表局部更新，短事务） */
+    void updateAvatar(String avatarUrl);
 
     /** 修改密码 */
     void updatePassword(PasswordUpdateDTO dto);
