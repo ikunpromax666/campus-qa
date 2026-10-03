@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -8,6 +8,14 @@ import { categoryApi, tagApi, questionApi } from '../api'
 import type { CategoryVO, TagVO } from '../types'
 
 const router = useRouter()
+const route = useRoute()
+
+// 编辑模式：/publish?id=123（从"我的提问"或详情页跳入）；无 id 即发布模式
+const editId = computed(() => {
+  const raw = route.query.id
+  return raw ? Number(raw) : null
+})
+const isEdit = computed(() => editId.value !== null)
 
 // 表单数据
 const title = ref('')
@@ -19,12 +27,32 @@ const categories = ref<CategoryVO[]>([])
 const tags = ref<TagVO[]>([])
 const submitting = ref(false)
 const previewing = ref(false)
+const loading = ref(false)
 
 onMounted(async () => {
   // 拦截器已返回 Result 结构 {code, message, data}，直接 res.code / res.data
   const [catRes, tagRes] = await Promise.all([categoryApi.list(), tagApi.list()])
   if (catRes.code === 200) categories.value = catRes.data || []
   if (tagRes.code === 200) tags.value = tagRes.data || []
+
+  // 编辑模式：回填详情（后端已关闭 status=1 的问题会拒编辑 20001，入口侧只对正常问题展示）
+  if (isEdit.value && editId.value) {
+    loading.value = true
+    try {
+      const res = await questionApi.getDetail(editId.value)
+      if (res.code === 200 && res.data) {
+        title.value = res.data.title
+        content.value = res.data.content
+        categoryId.value = res.data.category?.id ?? null
+        tagIds.value = (res.data.tags || []).map((t) => t.id)
+      } else {
+        ElMessage.error(res.message || '问题不存在或不可编辑')
+        router.replace('/')
+      }
+    } finally {
+      loading.value = false
+    }
+  }
 })
 
 // 标题字数（5-150 与后端 @Size 对齐）
@@ -57,17 +85,22 @@ async function submit() {
   }
   submitting.value = true
   try {
-    const res = await questionApi.publish({
+    const payload = {
       title: title.value.trim(),
       content: content.value,
       categoryId: categoryId.value,
       tagIds: tagIds.value
-    })
+    }
+    // 编辑走 PUT（局部字段更新 + 标签先删后插），发布走 POST
+    const res = isEdit.value && editId.value
+      ? await questionApi.update(editId.value, payload)
+      : await questionApi.publish(payload)
     if (res.code === 200) {
-      ElMessage.success('发布成功')
-      router.push('/')
+      ElMessage.success(isEdit.value ? '修改成功' : '发布成功')
+      // 编辑成功回详情页看效果；发布成功回首页
+      router.push(isEdit.value && editId.value ? `/question/${editId.value}` : '/')
     } else {
-      ElMessage.error(res.message || '发布失败')
+      ElMessage.error(res.message || (isEdit.value ? '修改失败' : '发布失败'))
     }
   } finally {
     submitting.value = false
@@ -88,9 +121,11 @@ async function submit() {
     </header>
 
     <div class="container">
-      <div class="card">
-        <h2 class="page-title">✍️ 发布问题</h2>
-        <p class="page-subtitle">提问时描述越清楚，越容易被回答和采纳</p>
+      <div class="card" v-loading="loading">
+        <h2 class="page-title">{{ isEdit ? '📝 编辑问题' : '✍️ 发布问题' }}</h2>
+        <p class="page-subtitle">
+          {{ isEdit ? '修改后保存，标签关联将整体更新' : '提问时描述越清楚，越容易被回答和采纳' }}
+        </p>
 
         <el-form label-position="top" size="large">
           <el-form-item label="标题（5-150 字）">
@@ -151,7 +186,13 @@ async function submit() {
           </el-form-item>
 
           <div class="submit-row">
-            <el-button round size="large" @click="router.push('/')">取消</el-button>
+            <el-button
+              round
+              size="large"
+              @click="router.push(isEdit && editId ? `/question/${editId}` : '/')"
+            >
+              取消
+            </el-button>
             <el-button
               type="primary"
               round
@@ -159,7 +200,7 @@ async function submit() {
               :loading="submitting"
               @click="submit"
             >
-              发布问题
+              {{ isEdit ? '保存修改' : '发布问题' }}
             </el-button>
           </div>
         </el-form>

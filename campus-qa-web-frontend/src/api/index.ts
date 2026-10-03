@@ -13,7 +13,9 @@ import type {
   ToggleResultVO,
   AdminUserVO,
   AdminCategoryVO,
-  AdminTagVO
+  AdminTagVO,
+  HotQuestionVO,
+  AnswererRankVO
 } from '../types'
 
 // ---------- 用户模块 ----------
@@ -71,6 +73,12 @@ export const questionApi = {
   publish: (data: { title: string; content: string; categoryId: number; tagIds: number[] }) =>
     request.post<Result<void>>('/question/publish', data),
 
+  // 编辑问题（作者）：字段与发布一致；后端局部更新 + 标签"先删后插"，均在事务内
+  update: (
+    id: number,
+    data: { title: string; content: string; categoryId: number; tagIds: number[] }
+  ) => request.put<Result<void>>(`/question/${id}`, data),
+
   // 我发表的提问（作者视角，含已关闭，不含已删除）
   my: (params: { page: number; size: number }) =>
     request.get<Result<PageResult<MyQuestionVO>>>('/question/my', { params }),
@@ -90,6 +98,10 @@ export const answerApi = {
 
   publish: (data: { questionId: number; content: string }) =>
     request.post<Result<void>>('/answer/publish', data),
+
+  // 编辑回答（仅回答作者，后端校验归属）
+  update: (id: number, content: string) =>
+    request.put<Result<void>>(`/answer/${id}`, { content }),
 
   // 后端是散参数 query 绑定（POST /answer/accept?answerId=&questionId=），用 params 传
   accept: (answerId: number, questionId: number) =>
@@ -156,4 +168,17 @@ export const adminApi = {
 
   // 标签被引用时后端拒绝（20009）
   deleteTag: (id: number) => request.delete<Result<void>>(`/admin/tag/${id}`)
+}
+
+// ---------- 排行榜模块 ----------
+// 两个榜单都是公开 GET（游客可看），limit 后端默认 10
+export const rankApi = {
+  hot: (limit = 10) =>
+    request.get<Result<HotQuestionVO[]>>('/rank/hot', { params: { limit } }),
+  answerer: (limit = 10) =>
+    request.get<Result<AnswererRankVO[]>>('/rank/answerer', { params: { limit } }),
+
+  // 手动重算（仅管理员，后端 @RequireAdmin；重算是全表扫描高成本操作）
+  refreshHot: () => request.post<Result<void>>('/rank/refresh'),
+  refreshAnswerer: () => request.post<Result<void>>('/rank/answerer/refresh')
 }

@@ -251,6 +251,40 @@ async function deleteAnswer(answer: AnswerVO) {
   }
 }
 
+// ---------- 编辑回答（仅回答作者；后端校验归属） ----------
+const editDialogVisible = ref(false)
+const editingAnswer = ref<AnswerVO | null>(null)
+const editContent = ref('')
+const editSaving = ref(false)
+
+function openEditAnswer(answer: AnswerVO) {
+  editingAnswer.value = answer
+  editContent.value = answer.content
+  editDialogVisible.value = true
+}
+
+async function saveEditAnswer() {
+  if (!editingAnswer.value) return
+  if (!editContent.value.trim()) {
+    ElMessage.warning('回答内容不能为空')
+    return
+  }
+  editSaving.value = true
+  try {
+    const res = await answerApi.update(editingAnswer.value.id, editContent.value)
+    if (res.code === 200) {
+      ElMessage.success('修改成功')
+      editDialogVisible.value = false
+      editingAnswer.value = null
+      await loadAnswers()
+    } else {
+      ElMessage.error(res.message)
+    }
+  } finally {
+    editSaving.value = false
+  }
+}
+
 // ---------- 发布回答 ----------
 async function publishAnswer() {
   const content = answerContent.value.trim()
@@ -425,6 +459,16 @@ function goBack() {
               >
                 ✔ 采纳为答案
               </el-button>
+              <!-- 编辑回答：仅回答作者（管理员可删不可代改，归属语义） -->
+              <el-button
+                v-if="answer.isOwner"
+                link
+                size="small"
+                type="primary"
+                @click="openEditAnswer(answer)"
+              >
+                编辑
+              </el-button>
               <!-- 删除回答：回答作者或管理员可见 -->
               <el-button
                 v-if="answer.isOwner || isAdmin"
@@ -471,6 +515,24 @@ function goBack() {
           <el-button type="primary" round @click="router.push('/login')">登录后回答</el-button>
         </section>
       </template>
+
+      <!-- 编辑回答弹窗（Teleport 到 body，不随 v-if=question 销毁） -->
+      <el-dialog v-model="editDialogVisible" title="编辑回答" width="640px">
+        <el-input
+          v-model="editContent"
+          type="textarea"
+          :rows="10"
+          maxlength="5000"
+          show-word-limit
+          placeholder="支持 Markdown 语法"
+        />
+        <template #footer>
+          <el-button @click="editDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="editSaving" @click="saveEditAnswer">
+            保存修改
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>

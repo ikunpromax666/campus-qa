@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
-import { adminApi } from '../api'
+import { adminApi, rankApi } from '../api'
 import { useUserStore } from '../stores/user'
 import type { AdminUserVO, AdminCategoryVO, AdminTagVO } from '../types'
 
@@ -14,6 +14,35 @@ const userStore = useUserStore()
 
 const activeTab = ref<'users' | 'categories' | 'tags'>('users')
 const fmt = (t: string) => dayjs(t).format('YYYY-MM-DD HH:mm')
+
+// ---------- 榜单维护 ----------
+// 重算是全表扫描 + 回写 Redis 的高成本操作，所以只给管理员手动触发，不放前台
+const refreshingHot = ref(false)
+const refreshingAnswerer = ref(false)
+
+async function refreshRank(kind: 'hot' | 'answerer') {
+  const label = kind === 'hot' ? '热门问题榜' : '优秀回答者榜'
+  try {
+    await ElMessageBox.confirm(`立即重算${label}并刷新缓存？数据量大时可能耗时数秒。`, '刷新榜单', {
+      confirmButtonText: '重算',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+  } catch {
+    return
+  }
+  if (kind === 'hot') refreshingHot.value = true
+  else refreshingAnswerer.value = true
+  try {
+    const res =
+      kind === 'hot' ? await rankApi.refreshHot() : await rankApi.refreshAnswerer()
+    if (res.code === 200) ElMessage.success(`${label}已刷新`)
+    else ElMessage.error(res.message)
+  } finally {
+    refreshingHot.value = false
+    refreshingAnswerer.value = false
+  }
+}
 
 // ---------- 用户管理 ----------
 const users = ref<AdminUserVO[]>([])
@@ -233,6 +262,17 @@ onMounted(() => {
     </header>
 
     <div class="container">
+      <!-- 榜单维护：高成本重算操作，仅管理员手动触发 -->
+      <div class="rank-ops">
+        <span class="rank-ops-label">榜单维护：</span>
+        <el-button size="small" :loading="refreshingHot" @click="refreshRank('hot')">
+          🔥 刷新热门问题榜
+        </el-button>
+        <el-button size="small" :loading="refreshingAnswerer" @click="refreshRank('answerer')">
+          🏆 刷新优秀回答者榜
+        </el-button>
+      </div>
+
       <el-tabs v-model="activeTab" class="admin-tabs" @tab-change="switchTab">
         <!-- ===== 用户管理 ===== -->
         <el-tab-pane label="用户管理" name="users">
@@ -425,6 +465,23 @@ onMounted(() => {
   max-width: 1080px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.rank-ops {
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.rank-ops-label {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
 }
 
 .admin-tabs {

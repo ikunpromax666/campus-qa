@@ -97,6 +97,40 @@
             @current-change="loadQuestions"
           />
         </div>
+
+        <!-- 右侧排行榜：后端按 赞×2+浏览×0.1+回答×3（问题）/ 回答×1+采纳×5（回答者）算分，Redis 缓存 -->
+        <div class="rankbar">
+          <section class="rank-card">
+            <div class="rank-title">🔥 热门问题 TOP10</div>
+            <div
+              v-for="q in hotQuestions"
+              :key="q.questionId"
+              class="rank-item"
+              @click="router.push(`/question/${q.questionId}`)"
+            >
+              <span class="rank-no" :class="{ top: q.rank <= 3 }">{{ q.rank }}</span>
+              <div class="rank-body">
+                <div class="rank-q-title">{{ q.title }}</div>
+                <div class="rank-q-stat">{{ q.viewCount }} 浏览 · {{ q.answerCount }} 回答</div>
+              </div>
+            </div>
+            <el-empty v-if="hotQuestions.length === 0" description="暂无数据" :image-size="50" />
+          </section>
+
+          <section class="rank-card">
+            <div class="rank-title">🏆 优秀回答者 TOP10</div>
+            <div v-for="u in answerers" :key="u.userId" class="rank-item user-item">
+              <span class="rank-no" :class="{ top: u.rank <= 3 }">{{ u.rank }}</span>
+              <el-avatar :size="30" :src="u.avatar || ''">{{ u.nickname?.charAt(0) }}</el-avatar>
+              <div class="rank-body">
+                <div class="rank-u-name">{{ u.nickname }}</div>
+                <div class="rank-q-stat">{{ u.answerCount }} 回答 · {{ u.acceptedCount }} 采纳</div>
+              </div>
+              <span class="rank-score">{{ u.score }}分</span>
+            </div>
+            <el-empty v-if="answerers.length === 0" description="暂无数据" :image-size="50" />
+          </section>
+        </div>
       </div>
     </el-main>
   </div>
@@ -107,9 +141,9 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { questionApi, categoryApi } from '../api'
+import { questionApi, categoryApi, rankApi } from '../api'
 import { useUserStore } from '../stores/user'
-import type { QuestionListVO, CategoryVO } from '../types'
+import type { QuestionListVO, CategoryVO, HotQuestionVO, AnswererRankVO } from '../types'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -155,6 +189,20 @@ const loadCategories = async () => {
   categories.value = res.data
 }
 
+// ---------- 排行榜（与问题列表独立加载，互不阻塞） ----------
+const hotQuestions = ref<HotQuestionVO[]>([])
+const answerers = ref<AnswererRankVO[]>([])
+
+const loadRanks = async () => {
+  // 两个榜单并发拉取；各自独立失败，不影响主列表（榜单是增强信息，降级为空态）
+  const [hotRes, answererRes] = await Promise.all([
+    rankApi.hot(10),
+    rankApi.answerer(10)
+  ])
+  if (hotRes.code === 200) hotQuestions.value = hotRes.data || []
+  if (answererRes.code === 200) answerers.value = answererRes.data || []
+}
+
 const selectCategory = (id: number | undefined) => {
   categoryId.value = id
   page.value = 1
@@ -173,6 +221,7 @@ const handleLogout = () => {
 onMounted(() => {
   loadCategories()
   loadQuestions()
+  loadRanks()
 })
 </script>
 
@@ -213,7 +262,7 @@ onMounted(() => {
 }
 
 .main {
-  max-width: 1080px;
+  max-width: 1200px;
   margin: 0 auto;
   width: 100%;
   padding: 20px 24px;
@@ -329,6 +378,111 @@ onMounted(() => {
 .list {
   flex: 1;
   min-width: 0;
+}
+
+/* 右侧排行榜栏 */
+.rankbar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rank-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 14px 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.rank-title {
+  font-size: 15px;
+  font-weight: bold;
+  padding: 0 4px 10px;
+  border-bottom: 1px solid #f1f3f7;
+  margin-bottom: 8px;
+}
+
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.rank-item:hover {
+  background: #f7f9fc;
+}
+
+/* 回答者行不可点（暂无用户主页），去掉 hover/指针 */
+.user-item {
+  cursor: default;
+}
+
+.user-item:hover {
+  background: transparent;
+}
+
+.rank-no {
+  width: 20px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+  color: #9ca3af;
+}
+
+/* 前三名金橙铜配色 */
+.rank-no.top {
+  color: #fff;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  border-radius: 6px;
+  font-size: 12px;
+  height: 20px;
+  line-height: 20px;
+}
+
+.rank-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-q-title {
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.rank-u-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rank-q-stat {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.rank-score {
+  font-size: 12px;
+  color: #f59e0b;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+/* 窄屏隐藏榜单栏，保证列表区可读宽度 */
+@media (max-width: 1100px) {
+  .rankbar {
+    display: none;
+  }
 }
 
 .question-card {

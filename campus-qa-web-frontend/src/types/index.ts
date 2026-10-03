@@ -120,6 +120,29 @@ export interface AdminTagVO {
   createTime: string
 }
 
+// ---------- 排行榜（与后端 VO 对齐） ----------
+export interface HotQuestionVO {
+  rank: number
+  questionId: number
+  title: string
+  likeCount: number
+  answerCount: number
+  viewCount: number
+  nickname: string
+  score: number // 热度分（仅排序依据，不展示小数）
+}
+
+export interface AnswererRankVO {
+  rank: number
+  userId: number
+  nickname: string
+  avatar: string | null
+  score: number // 积分 = 回答数×1 + 被采纳数×5
+  answerCount: number
+  acceptedCount: number
+  likeSum: number
+}
+
 // 我的回答/赞过的回答列表项（与后端 MyAnswerVO 对齐）
 export interface MyAnswerVO {
   id: number

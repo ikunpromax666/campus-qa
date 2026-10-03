@@ -38,6 +38,14 @@
                   <el-button
                     v-if="q.status === 0"
                     link
+                    type="primary"
+                    size="small"
+                    @click.stop="router.push(`/publish?id=${q.id}`)"
+                    >编辑</el-button
+                  >
+                  <el-button
+                    v-if="q.status === 0"
+                    link
                     type="warning"
                     size="small"
                     @click.stop="handleCloseQuestion(q)"
