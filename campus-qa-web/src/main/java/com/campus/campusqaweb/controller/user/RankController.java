@@ -1,6 +1,6 @@
 package com.campus.campusqaweb.controller.user;
 
-import com.campus.campusqacommon.annotation.RequireLogin;
+import com.campus.campusqacommon.annotation.RequireAdmin;
 import com.campus.campusqacommon.result.Result;
 import com.campus.campusqapojo.vo.AnswererRankVO;
 import com.campus.campusqapojo.vo.HotQuestionVO;
@@ -34,12 +34,13 @@ public class RankController {
     }
 
     /**
-     * 手动触发全量重算（调试用）
-     * TODO 上线前删除，或改成 @RequireAdmin —— 定时任务接管后这个接口不该再对外暴露
+     * 手动触发全量重算（运营/调试用）
+     * 鉴权：仅管理员。普通用户能看到榜单，但不能触发重算（重算是高成本全表扫描操作，
+     * 一旦匿名可调，被恶意刷接口会把 DB 打满——"可见"与"可操作"必须分级）
      */
     @PostMapping("/refresh")
-    @Operation(summary = "手动重算热榜（调试用）")
-    @RequireLogin
+    @Operation(summary = "手动重算热榜（管理员）")
+    @RequireAdmin
     public Result<Void> refresh() {
         rankService.refreshHotRank();
         return Result.success();
@@ -52,12 +53,11 @@ public class RankController {
     }
 
     /**
-     * 手动触发优秀回答者榜重算（调试用）
-     * TODO 上线前删除，或改成 @RequireAdmin
+     * 手动触发优秀回答者榜重算（运营/调试用），仅管理员，理由同 refresh
      */
     @PostMapping("/answerer/refresh")
-    @Operation(summary = "手动重算优秀回答者榜（调试用）")
-    @RequireLogin
+    @Operation(summary = "手动重算优秀回答者榜（管理员）")
+    @RequireAdmin
     public Result<Void> refreshAnswerer() {
         rankService.refreshAnswererRank();
         return Result.success();
