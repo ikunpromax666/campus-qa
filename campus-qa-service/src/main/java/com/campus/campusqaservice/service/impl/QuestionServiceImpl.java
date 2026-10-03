@@ -15,6 +15,8 @@ import com.campus.campusqapojo.entity.*;
 import com.campus.campusqapojo.vo.*;
 import com.campus.campusqaservice.service.QuestionService;
 import org.apache.ibatis.annotations.Select;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,13 +58,23 @@ public class QuestionServiceImpl implements QuestionService {
 
     private final FavoriteMapper favoriteMapper;
 
+    /**
+     * 浏览量缓冲计数器：详情页是读多写极多的热点，每看一次就 UPDATE 一行会放大成 DB 写热点。
+     * 改为 Redis INCR 暂存增量，由 ViewCountSyncTask 每分钟批量回写 MySQL。
+     */
+    private final StringRedisTemplate stringRedisTemplate;
+
+    /** Redis 缓冲 key 前缀，完整 key = question:view:{questionId} */
+    public static final String VIEW_COUNT_KEY_PREFIX = "question:view:";
+
     public QuestionServiceImpl(QuestionMapper questionMapper,
                                CategoryMapper categoryMapper,
                                TagMapper tagMapper,
                                QuestionTagMapper questionTagMapper,
                                UserMapper userMapper,
                                LikeRecordMapper likeRecordMapper,
-                               FavoriteMapper favoriteMapper) {
+                               FavoriteMapper favoriteMapper,
+                               StringRedisTemplate stringRedisTemplate) {
         this.questionMapper = questionMapper;
         this.categoryMapper = categoryMapper;
         this.tagMapper = tagMapper;
@@ -70,6 +82,7 @@ public class QuestionServiceImpl implements QuestionService {
         this.userMapper = userMapper;
         this.likeRecordMapper = likeRecordMapper;
         this.favoriteMapper = favoriteMapper;
+        this.stringRedisTemplate = stringRedisTemplate;
     }
 
     @Override
@@ -355,11 +368,18 @@ public class QuestionServiceImpl implements QuestionService {
             throw new BusinessException(ResultCode.QUESTION_NOT_FOUND);
         }
 
-        //浏览量+1
-        Question updateQuestion = new Question ();
-        updateQuestion.setId(id);
-        updateQuestion.setViewCount(question.getViewCount() + 1);
-        questionMapper.updateById(updateQuestion);
+        //浏览量+1：先进 Redis 缓冲（INCR 原子），返回"库中已回写值 + 缓冲中的未回写增量"
+        long displayedViewCount;
+        try {
+            // increment 返回自增后的值；key 不存在时从 0 开始。不设 TTL —— 丢了就是丢浏览量，
+            // 宁可让它一直占着内存等回写，也不给 key 设过期。
+            Long buffered = stringRedisTemplate.opsForValue().increment(VIEW_COUNT_KEY_PREFIX + id);
+            displayedViewCount = question.getViewCount() + (buffered == null ? 0 : buffered);
+        } catch (DataAccessException e) {
+            // Redis 挂了降级：直接写库（慢但可用），热点服务的可用性优先于一致性
+            questionMapper.incrementViewCount(id, 1);
+            displayedViewCount = question.getViewCount() + 1;
+        }
 
         QuestionDetailVO vo = new QuestionDetailVO();
 
@@ -433,7 +453,7 @@ public class QuestionServiceImpl implements QuestionService {
         vo.setId(question.getId());
         vo.setTitle(question.getTitle());
         vo.setContent(question.getContent());
-        vo.setViewCount(question.getViewCount() + 1);
+        vo.setViewCount((int) Math.min(displayedViewCount, Integer.MAX_VALUE));
         vo.setLikeCount(question.getLikeCount());
         vo.setAnswerCount(question.getAnswerCount());
         vo.setStatus(question.getStatus());
